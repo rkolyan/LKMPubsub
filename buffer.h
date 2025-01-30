@@ -4,6 +4,7 @@
 #include <linux/uaccess.h>
 
 struct ps_buffer {
+    struct list_head prohibited;
     void *base_begin;
     void *base_end;//Границы буфера в адресе (base_end - включительно)
     void *begin;
@@ -16,18 +17,31 @@ struct ps_buffer {
     int flag;
 };
 
+struct ps_prohibition {
+    int msg_num;
+    struct list_head list;
+};
+
+void set_prohibition_num(struct ps_prohibition *proh, int msg_num);
+
 int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size, int flag);
 int deinit_buffer(struct ps_buffer *buf);
 
 int is_buffer_full(struct ps_buffer *buf);
-int is_buffer_blocking(struct ps_buffer *buf);
+int is_buffer_access_reading(struct ps_buffer *buf, int msg_num);
+//int is_buffer_blocking(struct ps_buffer *buf);
 
-int delete_first_message(struct ps_buffer *buf);
+void delete_first_message(struct ps_buffer *buf);
+void create_last_message(struct ps_buffer *buf);
 
-int write_to_buffer(struct ps_buffer *buf, void __user *info);
-int read_from_buffer(struct ps_buffer *buf, int msg_num, void __user *info);
+int write_to_buffer(struct ps_buffer *buf, void *addr, void __user *info);
+int read_from_buffer(struct ps_buffer *buf, void *addr, void __user *info);
 
-int get_buffer_begin_num(struct ps_buffer *buf, int *msg_num);
+int get_buffer_begin_num(struct ps_buffer *buf);
+int get_buffer_end_num(struct ps_buffer *buf);
 
-int msg_num_to_addr(const struct ps_buffer *buf, int msg_num, void **addr);
+void prohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh);
+void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh);
+
+void *get_buffer_address(const struct ps_buffer *buf, int msg_num);
 #endif

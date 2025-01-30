@@ -8,6 +8,8 @@
 #include <linux/hashtable.h>
 #include <linux/types.h>
 
+#inlcude "buffer.h"
+
 #define PUBLISHER_HASHTABLE_BITS 3
 
 struct ps_publishers_collection {
@@ -16,8 +18,10 @@ struct ps_publishers_collection {
 
 struct ps_publisher {
     pid_t pid;
+    struct ps_prohibition proh;
     struct hlist_node hlist;
 };
+
 
 void init_publisher_collection(struct ps_publishers_collection *coll);
 int clear_publisher_collection(struct ps_publishers_collection *coll);
@@ -29,5 +33,7 @@ int find_publisher(struct ps_publishers_collection *coll, pid_t pid, struct ps_p
 
 int add_publisher(struct ps_publishers_collection *coll, struct ps_publisher *pub);
 int remove_publisher(struct ps_publishers_collection *coll, struct ps_publisher *pub);
+
+struct ps_prohibition *get_publisher_prohibition(struct ps_publisher *pub);
 
 #endif //MOD2_PUBLISHER_H

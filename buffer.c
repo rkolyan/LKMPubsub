@@ -4,7 +4,7 @@
 #include "buffer.h"
 
 //end_num - индекс, указывающий на ячейку, в которую будет записано новое сообщение
-int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size, int flag) {
+int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 	if (!buf || !buf_size || !blk_size)
 		return -EINVAL;
 	size_t final_size = buf_size * blk_size;
@@ -20,7 +20,7 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size, int fla
 	buf->end_num = 0;
 	buf->buf_size = buf_size;
 	buf->blk_size = blk_size;
-	buf->flag = flag;
+
 	return 0;
 }
 
@@ -39,12 +39,12 @@ int is_buffer_full(struct ps_buffer *buf) {
 	return 0;
 }
 
-int is_buffer_blocking(struct ps_buffer *buf) {
-	if (!buf)
-		return -EINVAL;
-	return buf->flag;
+//TODO: засчет адреса можно упростить поиск адреса
+int is_buffer_access_reading(struct ps_buffer *buf, int msg_num) {
+    if (msg_num - buf->begin_num < 0 || buf->end_num - msg_num <= 0)
+        return 0;
+    return 1;
 }
-
 
 int delete_first_message(struct ps_buffer *buf) {
 	if (!buf)
@@ -142,10 +142,23 @@ int read_from_buffer(struct ps_buffer *buf, int msg_num, void __user *user_info)
 	return 0;
 }
 
-int get_buffer_begin_num(struct ps_buffer *buf, int *msg_num) {
-    if (!buf || !msg_num)
-        return -EINVAL;
-    *msg_num = buf->begin_num;
-    return 0;
+int get_buffer_begin_num(struct ps_buffer *buf) {
+    return buf->begin_num;
+}
+
+int get_buffer_end_num(struct ps_buffer *buf) {
+    return buf->end_num;
+}
+
+inline void set_prohibition_num(struct ps_prohibition *proh, int msg_num) {
+    proh->msg_num = msg_num;
+}
+
+void prohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
+    list_add_tail_rcu(&(proh->list), &(buf->prohibited));
+}
+
+void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
+    list_del_rcu(&proh->list);
 }
 //TODO: Если все подписчики прочитали сообщения, то сообщение можно удалить

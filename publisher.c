@@ -79,3 +79,7 @@ int clear_publisher_collection(struct ps_publishers_collection *coll) {
     }
     return 0;
 }
+
+inline struct ps_publisher *get_publisher_prohibition(struct ps_publisher *pub) {
+    return &(pub->proh);
+}

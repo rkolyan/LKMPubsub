@@ -101,7 +101,6 @@ int push_used_position_last(struct ps_positions_desc *desc, struct ps_position *
     struct ps_position *pos = NULL;
     hash_add_rcu(desc->table, &(pos->place), pos->msg_num);
     list_add_tail(&(pos->main_list), &(desc->used));
-    INIT_LIST_HEAD(&(pos->list));
     spin_unlock(&(desc->lock));
     return 0;
 }
@@ -112,7 +111,6 @@ int push_used_position_before(struct ps_positions_desc *desc, struct ps_position
     spin_lock(&(desc->lock));
     list_add_tail(&(pos->main_list), &(next_pos->main_list));
     hash_add_rcu(desc->table, &(pos->place), pos->msg_num);
-    INIT_LIST_HEAD(&(pos->list));
     spin_unlock(&(desc->lock));
     return 0;
 }
@@ -121,7 +119,6 @@ int push_used_subposition(struct ps_positions_desc *desc, struct ps_position *po
     if (!desc || !pos || !sub_pos)
         return -EINVAL;
     spin_lock(&(desc->lock));
-    list_add_rcu(&(sub_pos->list), &(pos->list));
     list_add_rcu(&(sub_pos->main_list), &(pos->main_list));
     spin_unlock(&(desc->lock));
     return 0;
