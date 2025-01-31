@@ -27,7 +27,7 @@ int create_subscriber_struct(pid_t pid, struct ps_subscriber **result);
 int delete_subscriber_struct(struct ps_subscriber *result);
 
 int find_subscriber(struct ps_subscribers_collection *coll, pid_t pid, struct ps_subscriber **result);
-int get_subscriber_position(struct ps_subscriber *sub, struct ps_position **result);
+struct ps_position *get_subscriber_position(struct ps_subscriber *sub);
 
 int add_subscriber(struct ps_subscribers_collection *coll, struct ps_subscriber *sub);
 int remove_subscriber(struct ps_subscribers_collection *coll, struct ps_subscriber *sub);

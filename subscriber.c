@@ -63,11 +63,8 @@ int remove_subscriber(struct ps_subscribers_collection *coll, struct ps_subscrib
     return 0;
 }
 
-int get_subscriber_position(struct ps_subscriber *sub, struct ps_position **result) {
-    if (!sub || !result)
-        return -EINVAL;
-    *result = sub->pos;
-    return 0;
+struct ps_position *get_subscriber_position(struct ps_subscriber *sub) {
+    return sub->pos;
 }
 
 int connect_subscriber_position(struct ps_subscriber *sub, struct ps_position *pos) {

@@ -52,6 +52,7 @@ int add_publisher(struct ps_publishers_collection *coll, struct ps_publisher *pu
     if (!coll || !pub)
         return -EINVAL;
     hash_add_rcu(coll->pubs, &(pub->hlist), pub->pid);
+    synchronize_rcu();
     return 0;
 }
 
@@ -59,6 +60,7 @@ int remove_publisher(struct ps_publishers_collection *coll, struct ps_publisher 
     if (!coll || !pub)
         return -EINVAL;
     hash_del_rcu(&(pub->hlist));
+    synchronize_rcu();
     return 0;
 }
 
@@ -80,6 +82,6 @@ int clear_publisher_collection(struct ps_publishers_collection *coll) {
     return 0;
 }
 
-inline struct ps_publisher *get_publisher_prohibition(struct ps_publisher *pub) {
+inline struct ps_prohibition *get_publisher_prohibition(struct ps_publisher *pub) {
     return &(pub->proh);
 }

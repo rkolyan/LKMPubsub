@@ -12,7 +12,7 @@
 struct ps_node {
 	unsigned long id;
 	struct ps_buffer buf;
-    spinlock_t buf_lock;
+    spinlock_t pos_lock;
 	struct ps_positions_desc desc;
 	struct rw_semaphore node_rwsem;//Для защиты от удаления
 	spinlock_t subs_lock;//TODO: А нужно ли?
@@ -81,7 +81,7 @@ int get_node_id(struct ps_node *node, unsigned long __user *result) {
     return 0;
 }
 
-int create_node_struct(size_t buf_size, size_t block_size, unsigned int flag, struct ps_node **result) {
+int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **result) {
 	if (buf_size == 0 || block_size == 0 || block_size > buf_size || result == NULL)
 		return -EINVAL;
 	struct ps_node *node = vzalloc(sizeof(struct ps_node));
@@ -89,7 +89,7 @@ int create_node_struct(size_t buf_size, size_t block_size, unsigned int flag, st
 		return -ENOMEM;
 	INIT_HLIST_NODE(&(node->hlist));
 	node->id = (unsigned long) &(node->hlist);
-	int err = init_buffer(&(node->buf), buf_size, block_size, flag);
+	int err = init_buffer(&(node->buf), buf_size, block_size);
 	if (err) {
 		//pr_err(__func__ ":Нельзя выделить памяти для вспомогательной информации ps_buffer!");
 		vfree(node);
@@ -106,13 +106,10 @@ int create_node_struct(size_t buf_size, size_t block_size, unsigned int flag, st
 int delete_node_struct(struct ps_node *node) {
 	if (!node)
 		return -EINVAL;
-	struct list_head *ptr = NULL, *tmp = NULL;
-	struct ps_message *msg = NULL;
-
     clear_publisher_collection(&(node->pubs_coll));
     clear_subscriber_collection(&(node->subs_coll));
-    deinit_positions_desc();
-    deinit_buffer();
+    deinit_positions_desc(&(node->desc));
+    deinit_buffer(&(node->buf));
 
     vfree(node);
 
@@ -135,25 +132,28 @@ int find_node(unsigned long id, struct ps_node **result) {
 int add_position_in_node(struct ps_node *node, struct ps_position *pos) {
     if (!node || !pos)
         return -EINVAL;
-    //TODO: Сделать защиту от одновременного доступа к критической секции
-    return push_free_position(&(node->desc), pos);
+    spin_lock(&(node->pos_lock));
+    push_free_position(&(node->desc), pos);
+    spin_unlock(&(node->pos_lock));
+    return 0;
 }
 
 int remove_position_in_node(struct ps_node *node) {
     if (!node)
         return -EINVAL;
     struct ps_position *pos = NULL;
+    spin_lock(&(node->pos_lock));
     int err = find_free_position(&(node->desc), &pos);
-    if (err)
-        return -ENOENT;
-    return pop_free_position(&(node->desc), pos);
+    if (!err)
+        pop_free_position(&(node->desc), pos);
+    spin_unlock(&(node->pos_lock));
+    return err;
 }
 
 int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
     if (!node || !sub)
         return -EINVAL;
 
-    //TODO: Сделай так, что при поиске первой позиции в случае отсутствия таковой создание новой (Или удаление, до тех пор, пока не будет найдена след) можно было
     spin_lock(&(node->subs_lock));
     add_subscriber(&(node->subs_coll), sub);
     spin_unlock(&(node->subs_lock));
@@ -166,11 +166,12 @@ int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
         err = find_free_position(&(node->desc), &pos);
         if (!err) {
             pop_free_position(&(node->desc), pos);
-            int msg_num = 0;
-            get_buffer_begin_num(&(node->buf), &msg_num);
+            int msg_num = get_buffer_begin_num(&(node->buf));
             set_position_num(pos, msg_num);
             connect_subscriber_position(sub, pos);
             push_used_position_last(&(node->desc), pos);
+        } else {
+            err = EBADF;
         }
     }
     spin_unlock(&(node->pos_lock));
@@ -182,12 +183,14 @@ int remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
         return -EINVAL;
     struct ps_position *pos = NULL;
     spin_lock(&(node->subs_lock));
-    get_subscriber_position(sub, &pos);
+    pos = get_subscriber_position(sub);
+    spin_lock(&(node->pos_lock));
     disconnect_subscriber_position(sub);
     if (is_position_not_used(pos)) {
         pop_used_position(&(node->desc), pos);
         push_free_position(&(node->desc), pos);
     }
+    spin_unlock(&(node->pos_lock));
     remove_subscriber(&(node->subs_coll), sub);
     spin_unlock(&(node->subs_lock));
     return 0;
@@ -206,53 +209,55 @@ int find_subscriber_in_node(struct ps_node *node, pid_t pid, struct ps_subscribe
 int add_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
     if (!node || !pub)
         return -EINVAL;
-    return add_publisher(&(node->pubs_coll), pub);
+    spin_lock(&(node->pubs_lock));
+    int err = add_publisher(&(node->pubs_coll), pub);
+    spin_unlock(&(node->pubs_lock));
+    return err;
 }
 
 int find_publisher_in_node(struct ps_node *node, pid_t pid, struct ps_publisher **result) {
     if (!node || pid < 0 || !result)
         return -EINVAL;
     int err = 0;
-    //down_read(node->pubs_rwsem);
     err = find_publisher(&(node->pubs_coll), pid, result);
-    //up_read(node->pubs_rwsem);
     return err;
 }
 
 int remove_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
     if (!node || !pub)
         return -EINVAL;
-    return remove_publisher(&(node->pubs_coll), pub);
+    spin_lock(&(node->pubs_lock));
+    int err = remove_publisher(&(node->pubs_coll), pub);
+    spin_unlock(&(node->pubs_lock));
+    return err;
 }
 
 int add_node(struct ps_node *node) {
-    if (!node)
+    if (!node) {
         return -EINVAL;
+    }
 	hash_add(nodes, &(node->hlist), node->id);
     return 0;
 }
 
 int remove_node(struct ps_node *node) {
-    if (!node)
+    if (!node) {
         return -EINVAL;
+    }
 	hash_del(&(node->hlist));
     return 0;
 }
-
-/*
- * Заменить pop
- */
 
 int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void __user *info) {
     if (!node || !info || !sub)
         return -EINVAL;
     struct ps_position *pos = get_subscriber_position(sub), *next_pos = NULL, *new_pos = NULL;
+    void *addr = NULL;
     int msg_num = get_position_num(pos), err = 0;
     //1)Проверка, находится ли текущий номер в области допустимых значений (для этого в buffer необходимо добавить значение end_read, которое обновляется после каждого завершения записи)
     if (is_buffer_access_reading(&(node->buf), msg_num)) {
         //2)Получаем по номеру адрес буфера
-        //TODO: Нужно вычислять относительно begin_num и end_num
-        addr = get_buffer_address(buf, msg_num);
+        addr = get_buffer_address(&(node->buf), msg_num);
         //3)Читаем
         err = read_from_buffer(&(node->buf), addr, info);
         //4)Далее отказываемся от позиции на этом номере
@@ -262,12 +267,9 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
         spin_lock(&(node->pos_lock));
         if (is_position_not_used(pos)) {
             pop_used_position(&(node->desc), pos);
-            //TODO: В свободных листах можно использовать RCU
             push_free_position(&(node->desc), pos);
-            spin_lock(&(node->buf_lock));
-            if (get_buffer_begin_num(node->buf) == msg_num)
-                delete_first_message(node->buf);//TODO: Тут наоборот нужно использовать неделимую переменную, чтоб увеличить количество свободных элементов
-            spin_unlock(&(node->buf_lock));
+            if (get_buffer_begin_num(&(node->buf)) == msg_num)
+                delete_first_message(&(node->buf));
         }
         spin_unlock(&(node->pos_lock));
         msg_num++;
@@ -308,24 +310,24 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void __
 		return -EINVAL;
 	int msg_num = 0, err = 0;
     void *addr = NULL;
-    struct ps_position *pos = NULL;
     struct ps_prohibition *proh = get_publisher_prohibition(pub);
-    spin_lock(&(node->buf_lock));
+    spin_lock(&(node->pos_lock));
 	if (!is_buffer_full(&(node->buf))) {
         //1)Получить свободный номер (это end_num)
         msg_num = get_buffer_end_num(&(node->buf));
         set_prohibition_num(proh, msg_num);
         //2)Получить адрес свободного блока (это end)
         addr = get_buffer_address(&(node->buf), msg_num);
-        buffer_prohibit(&(node->buf), proh);
+        prohibit_buffer(&(node->buf), proh);
+
         create_last_message(&(node->buf));
-        spin_unlock(&(node->buf_lock));
+        spin_unlock(&(node->pos_lock));
 
         err = write_to_buffer(&(node->buf), addr, info);
 
-        spin_lock(&(node->buf_lock));
-        buffer_unprohibit(&(node->buf), proh);
+        spin_lock(&(node->pos_lock));
+        unprohibit_buffer(&(node->buf), proh);
 	}
-    spin_unlock(&(node->buf_lock));
+    spin_unlock(&(node->pos_lock));
 	return err;
 }

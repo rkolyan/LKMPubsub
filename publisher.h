@@ -8,7 +8,7 @@
 #include <linux/hashtable.h>
 #include <linux/types.h>
 
-#inlcude "buffer.h"
+#include "buffer.h"
 
 #define PUBLISHER_HASHTABLE_BITS 3
 

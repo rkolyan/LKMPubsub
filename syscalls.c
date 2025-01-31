@@ -3,9 +3,9 @@
 #include <linux/linkage.h>
 #include <linux/kprobes.h>
 
-asmlinkage long sys_ps_node_create(size_t buf_size, size_t buf_block_size, unsigned int flag, unsigned long __user *result) {
+asmlinkage long sys_ps_node_create(size_t buf_size, size_t buf_block_size, unsigned long __user *result) {
 	struct ps_node *node = NULL;
-	int err = create_node_struct(buf_size, buf_block_size, flag, &node);
+	int err = create_node_struct(buf_size, buf_block_size, &node);
 	if (err) {
 		//pr_err(__func__ ":Нельзя добавить топик!");
 		return err;
@@ -178,7 +178,7 @@ asmlinkage long sys_ps_node_send(unsigned long node_id, void __user *info) {
 	if (!err) {
 		err = find_publisher_in_node(node, pub_id, &pub);
 		if (!err)
-			err = send_message_to_node(node, info);
+			err = send_message_to_node(node, pub, info);
 		ps_current_read_unlock(node);
 	}
 	return err;

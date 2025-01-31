@@ -12,9 +12,8 @@
 #define POSITION_TABLE_BITS 3
 
 struct ps_positions_desc {
-    struct list_head *free;
-    spinlock_t lock; //Нужен, для перемещений позиций в пустой список или непустой
-    struct list_head *used;
+    struct list_head free;
+    struct list_head used;
     DECLARE_HASHTABLE(table, POSITION_TABLE_BITS);
 };
 
@@ -22,7 +21,7 @@ struct ps_position {
     int cnt; //Количество текущих подписчиков на структуру
     int msg_num; //Номер текущего сообщения, используется, если hsame указывает на NULL
     struct hlist_node place; //Это для хранения в специальной хеш-таблицы, чтобы при удалении сообщения, сразу найти нотификатор
-    struct list_head main_list; //Список очередности элементов
+    struct list_head list; //Список очередности элементов
 };
 
 
@@ -42,7 +41,7 @@ int find_msg_num_position(struct ps_positions_desc *desc, int msg_num, struct ps
 int find_next_position(struct ps_positions_desc *desc, struct ps_position *pos, struct ps_position **result);//Ищет следующую позицию из списка (она нужна, если )
 int find_first_position(struct ps_positions_desc *desc, struct ps_position **result);
 
-int set_position_num(struct ps_position *pos, int msg_num);
+void set_position_num(struct ps_position *pos, int msg_num);
 int get_position_num(struct ps_position *pos);
 
 int is_position_not_used(struct ps_position *pos);
