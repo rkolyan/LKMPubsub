@@ -15,8 +15,8 @@ struct ps_node {
     spinlock_t pos_lock;
 	struct ps_positions_desc desc;
 	struct rw_semaphore node_rwsem;//Для защиты от удаления
-	spinlock_t subs_lock;//TODO: А нужно ли?
-    spinlock_t pubs_lock;//TODO: А нужно ли?
+	spinlock_t subs_lock;
+    spinlock_t pubs_lock;
     struct ps_subscribers_collection subs_coll;
     struct ps_publishers_collection pubs_coll;
 	struct hlist_node hlist;//Элемент из хеш-таблицы
@@ -288,7 +288,7 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
                     connect_subscriber_position(sub, new_pos);
                     push_used_position_before(&(node->desc), new_pos, next_pos);
                 }
-            } else if (err = -ENOENT) {
+            } else if (err == -ENOENT) {
                 err = find_free_position(&(node->desc), &new_pos);
                 if (!err) {
                     pop_free_position(&(node->desc), new_pos);

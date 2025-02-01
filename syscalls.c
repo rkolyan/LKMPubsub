@@ -246,6 +246,7 @@ static int find_ni_syscall_addr(void) {
     for (; i < SYSCALL_TABLE_SIZE-1; i++) {
         if (syscall_table[i] == syscall_table[i+1]) {
             sys_ni_syscall_addr = syscall_table[i];
+	    break;
         }
     }
     return 0;
@@ -266,14 +267,27 @@ static int find_free_indexes(void) {
 }
 
 static inline void print_free_indexes (void) {
+    trace_puts("bzhe_print_free_indexes\n");
     pr_info("Список свободных номеров обработчиков системных вызовов:");
     int j = 0;
     for (; j < NODE_SYSCALL_COUNT; j++) {
-        pr_info("%d ", inds[j]);
+        trace_printk("bzhe %d ", inds[j]);
     }
+    trace_puts("\nbzhe_print_free_indexes\n");
+}
+
+//В связи с тем, что в ядре выше версии 5.3 удалили write_cr0
+static void write_cr0_unsafe(unsigned long val)
+{
+    asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
 }
 
 static int hook_handlers(void) {
+	unsigned long old_cr0 = 0;
+    trace_puts("bzhe_begin");
+    trace_printk("bzhe sys_call_table = %p\n sys_ni_syscall = %p\n", syscall_table, sys_ni_syscall_addr);
+    old_cr0 = read_cr0();
+    write_cr0_unsafe(old_cr0 & ~(X86_CR0_WP));
     syscall_table[inds[NR_node_create]] = sys_ps_node_create;
     syscall_table[inds[NR_node_delete]] = sys_ps_node_delete;
     syscall_table[inds[NR_node_publish]] = sys_ps_node_publish;
@@ -282,6 +296,8 @@ static int hook_handlers(void) {
     syscall_table[inds[NR_node_unsubscribe]] = sys_ps_node_unsubscribe;
     syscall_table[inds[NR_node_recv]] = sys_ps_node_recv;
     syscall_table[inds[NR_node_send]] = sys_ps_node_send;
+    write_cr0_unsafe(old_cr0);
+    trace_puts("ura_bzhe_end");
     return 0;
 }
 
@@ -295,9 +311,13 @@ int hook_functions(void) {
 }
 
 int unhook_functions(void) {
-    int i = NR_node_create;
+	unsigned long old_cr0 = 0;
+    int i = 0;
+    old_cr0 = read_cr0();
+    write_cr0_unsafe(old_cr0 & ~(X86_CR0_WP));
     for (; i < NODE_SYSCALL_COUNT; i++) {
         syscall_table[inds[i]] = sys_ni_syscall_addr;
     }
+    write_cr0_unsafe(old_cr0);
     return 0;
 }
