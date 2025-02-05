@@ -60,9 +60,9 @@ void ps_nodes_write_lock(void) {
 	write_lock(&nodes_rwlock);
 }
 void ps_nodes_write_unlock(void) {
-    trace_printk("%s:&nodes_rwlock = %p\n", __func__, &nodes_rwlock);
+	//trace_printk("%s:&nodes_rwlock = %p\n", __func__, &nodes_rwlock);
 	write_unlock(&nodes_rwlock);
-    trace_printk("%s:after write_unlock\n", __func__);
+	//trace_printk("%s:after write_unlock\n", __func__);
 }
 
 void ps_current_read_lock(struct ps_node *node) {
@@ -112,15 +112,15 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 int delete_node_struct(struct ps_node *node) {
 	if (!node)
 		return -EINVAL;
-    trace_printk("%s:before clear_publisher_collection\n", __func__);
+    //trace_printk("%s:before clear_publisher_collection\n", __func__);
     clear_publisher_collection(&(node->pubs_coll));
-    trace_printk("%s:before clear_subscriber_collection\n", __func__);
+    //trace_printk("%s:before clear_subscriber_collection\n", __func__);
     clear_subscriber_collection(&(node->subs_coll));
-    trace_printk("%s:before deinit_positions_desc\n", __func__);
+    //trace_printk("%s:before deinit_positions_desc\n", __func__);
     deinit_positions_desc(&(node->desc));
-    trace_printk("%s:before deinit_buffer\n", __func__);
+    //trace_printk("%s:before deinit_buffer\n", __func__);
     deinit_buffer(&(node->buf));
-    trace_printk("%s:before vfree\n", __func__);
+    //trace_printk("%s:before vfree\n", __func__);
     vfree(node);
 
 	return 0;

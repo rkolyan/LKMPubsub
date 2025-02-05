@@ -8,6 +8,6 @@
 int main(void) {
 	unsigned long id = 0;
 	int err = ps_node_create((size_t)BUF_SIZE, (size_t)BLOCK_SIZE, &id);
-	printf("err = %d, id = %lu\n", err, id);
+	printf("err = %d, id = %lu, size(size_t)=%ld\n", err, id, sizeof(size_t));
 	return 0;
 }

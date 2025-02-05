@@ -1,5 +1,6 @@
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
+#include <linux/rculist.h>
 
 #include "buffer.h"
 

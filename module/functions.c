@@ -3,21 +3,22 @@
 //
 
 #include "node.h"
+#include "functions.h"
 
 long ps_node_create(size_t buf_size, size_t block_size, unsigned long __user *result) {
     struct ps_node *node = NULL;
-    //trace_printk("begin buf_size = %lu, block_size = %lu, result = %p\n", buf_size, block_size, result);
+    trace_printk("begin buf_size = %lu, block_size = %lu, result = %p\n", buf_size, block_size, result);
     int err = create_node_struct(buf_size, block_size, &node);
-    //trace_printk("after create_node_struct:%d,%p\n", err, node);
+    trace_printk("after create_node_struct:%d,%p\n", err, node);
     if (err) {
-    //pr_err(__func__ ":Нельзя добавить топик!");
+    trace_puts("Нельзя добавить топик!\n");
         return err;
     }
     ps_nodes_write_lock();
     add_node(node);
     get_node_id(node, result);
     ps_nodes_write_unlock();
-    //trace_printk("end\n");
+    trace_printk("end\n");
     return 0;
 }
 
@@ -25,23 +26,23 @@ long ps_node_delete(unsigned long node_id) {
     struct ps_node *node = NULL;
     long err = 0;
     ps_nodes_write_lock();
-    trace_printk("begin node_id = %lu\n", node_id);
+    //trace_printk("begin node_id = %lu\n", node_id);
     err = find_node(node_id, &node);
-    trace_printk("after find_node err = %ld, node = %p\n", err, node);
+    //trace_printk("after find_node err = %ld, node = %p\n", err, node);
     if (!err) {
         remove_node(node);
-        trace_puts("after remove_node\n");
+        //trace_puts("after remove_node\n");
     }
-    trace_puts("before ps_nodes_write_unlock\n");
+    //trace_puts("before ps_nodes_write_unlock\n");
     ps_nodes_write_unlock();
-    trace_puts("after ps_nodes_write_unlock\n");
+    //trace_puts("after ps_nodes_write_unlock\n");
     if (!err) {
         ps_current_write_wait(node);
-        trace_puts("after ps_current_write_wait\n");
+        //trace_puts("after ps_current_write_wait\n");
         //TODO: Доделать delete_node
-        trace_puts("before delete_node_struct\n");
+        //trace_puts("before delete_node_struct\n");
         err = delete_node_struct(node);
-        trace_puts("after delete_node_struct\n");
+        //trace_puts("after delete_node_struct\n");
     }
     return err;
 }
