@@ -1,6 +1,7 @@
 #include <linux/linkage.h>
 #include <linux/kprobes.h>
 
+#include "syscalls.h"
 #include "functions.h"
 
 enum {
@@ -15,39 +16,40 @@ enum {
 	NODE_SYSCALL_COUNT
 };
 
-static int sys_ni_syscall_kprobe_pre_handler(struct kprobe *p, struct pt_regs *regs)
+#define SYSCALL_TABLE_SIZE 450
+
+static void **syscall_table = NULL, *sys_ni_syscall_addr = NULL;
+static int inds[NODE_SYSCALL_COUNT];
+
+static int sys_ni_syscall_kretprobe_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	//Хохма в том, что там идет перехват функции, у которой в качестве аргумента был указатель на pt_regs
 	struct pt_regs *cur = (struct pt_regs *)(regs->di);
+	trace_printk("regs->ax = %ld, regs->orig_ax = %ld\n", regs->ax, regs->orig_ax);
 	if (regs->si == inds[NR_node_create]) {
-		return ps_node_create((size_t)cur->di, (size_t)cur->si, (unsigned long __user *)cur->dx);
+		regs->ax = ps_node_create((size_t)cur->di, (size_t)cur->si, (unsigned long __user *)cur->dx);
 	} else if (regs->si == inds[NR_node_delete]) {
-		return ps_node_delete((unsigned long)cur->di);
+		regs->ax = ps_node_delete((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_subscribe]) {
-		return ps_node_subscribe((unsigned long)cur->di);
+		regs->ax = ps_node_subscribe((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_unsubscribe]) {
-		return ps_node_unsubscribe((unsigned long)cur->di);
+		regs->ax = ps_node_unsubscribe((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_publish]) {
-		return ps_node_publish((unsigned long)cur->di);
+		regs->ax = ps_node_publish((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_unpublish]) {
-		return ps_node_unpublish((unsigned long)cur->di);
+		regs->ax = ps_node_unpublish((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_send]) {
-		return ps_node_send((unsigned long)cur->di, (void __user *)cur->si);
+		regs->ax = ps_node_send((unsigned long)cur->di, (void __user *)cur->si);
 	} else if (regs->si == inds[NR_node_recv]) {
-		return ps_node_recv((unsigned long)cur->di, (void __user *)cur->si);
+		regs->ax = ps_node_recv((unsigned long)cur->di, (void __user *)cur->si);
 	}
-	return -ENOSYS;
+	return 0;
 }
 
-struct kprobe syscall_kprobe = {
-	.symbol_name = "__x64_sys_ni_syscall",
-	.pre_handler = sys_ni_syscall_kprobe_pre_handler,
+struct kretprobe syscall_kretprobe = {
+	.kp.symbol_name = "__x64_sys_ni_syscall",
+	.handler = sys_ni_syscall_kretprobe_handler
 };
-
-#define SYSCALL_TABLE_SIZE 450
-
-static void **syscall_table = NULL;
-static int inds[NODE_SYSCALL_COUNT];
 
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
 static int find_syscall_table(void) {
@@ -65,7 +67,14 @@ static int find_syscall_table(void) {
 }
 
 static int find_ni_syscall_addr(void) {
-	return register_kprobe(&syscall_kprobe);
+    int i = 0;
+    for (; i < SYSCALL_TABLE_SIZE-1; i++) {
+        if (syscall_table[i] == syscall_table[i+1]) {
+            sys_ni_syscall_addr = syscall_table[i];
+	    break;
+        }
+    }
+    return register_kretprobe(&syscall_kretprobe);
 }
 
 static int find_free_indexes(void) {
@@ -100,6 +109,6 @@ int hook_functions(void) {
 }
 
 int unhook_functions(void) {
-	unregister_kprobe(&syscall_kprobe);
+	unregister_kretprobe(&syscall_kretprobe);
 	return 0;
 }

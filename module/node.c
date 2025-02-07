@@ -4,8 +4,10 @@
 #include "publisher.h"
 #include "node.h"
 
+
 #include <linux/rwsem.h>
 #include <linux/vmalloc.h>
+#include <linux/delay.h>
 
 #define NODE_HASHTABLE_BITS 4
 
@@ -74,10 +76,13 @@ void ps_current_read_unlock(struct ps_node *node) {
 }
 
 void ps_current_write_wait(struct ps_node *node) {
-    trace_printk("before down_write, &(node->node_rwsem)=%p\n", &(node->node_rwsem));
+    trace_printk("before down_write, node=%p, &(node->node_rwsem)=%p\n", node, &(node->node_rwsem));
+    mdelay(10);
 	down_write(&(node->node_rwsem));
     trace_puts("after down_write\n");
+    mdelay(10);
 	up_write(&(node->node_rwsem));
+    mdelay(10);
     trace_puts("after up_write\n");
 }
 
@@ -93,6 +98,7 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	struct ps_node *node = vzalloc(sizeof(struct ps_node));
 	if (!node)
 		return -ENOMEM;
+	trace_puts("vzalloc successed!\n");
 	INIT_HLIST_NODE(&(node->hlist));
 	node->id = (unsigned long) &(node->hlist);
 	int err = init_buffer(&(node->buf), buf_size, block_size);
@@ -106,6 +112,7 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
     init_subscriber_collection(&(node->subs_coll));
 	init_rwsem(&(node->node_rwsem));
 	*result = node;
+	trace_puts("vzalloc ended!\n");
 	return 0;
 }
 
@@ -136,6 +143,7 @@ int find_node(unsigned long id, struct ps_node **result) {
 	}
 	if (!node || node->id != id)
 		return -ENOENT;
+	*result = node;
 	return 0;
 }
 
