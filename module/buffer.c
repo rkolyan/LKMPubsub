@@ -13,7 +13,8 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 	if (!buf->base_begin)
 		return -ENOMEM;
     //Конечный адрес должен быть включен
-	buf->base_end = buf->base_begin + final_size - blk_size;
+    //TODO: Тут конченая хуйня с char
+	buf->base_end = ((char *)buf->base_begin) + final_size - blk_size;
 	buf->begin = buf->base_begin;
 	buf->end = buf->base_begin;
 	buf->base_begin_num = 0;

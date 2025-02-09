@@ -38,6 +38,7 @@ int find_subscriber(struct ps_subscribers_collection *coll, pid_t pid, struct ps
             *result = sub;
             flag = 1;
             err = 0;
+	    break;
         }
     }
     if (flag) {

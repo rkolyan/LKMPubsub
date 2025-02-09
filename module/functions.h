@@ -10,4 +10,4 @@ long ps_node_unsubscribe(unsigned long node_id);
 long ps_node_publish(unsigned long node_id);
 long ps_node_unpublish(unsigned long node_id);
 long ps_node_send(unsigned long node_id, void __user *info);
-long ps_node_recv(unsigned long node_id, void __user *info);
+long ps_node_receive(unsigned long node_id, void __user *info);

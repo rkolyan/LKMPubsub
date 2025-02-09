@@ -34,15 +34,15 @@ int find_publisher(struct ps_publishers_collection *coll, pid_t pid, struct ps_p
     int err = 0;
     hash_for_each_possible_rcu(coll->pubs, pub, hlist, pid) {
         if (pub->pid == pid) {
-            *result = pub;
             flag = 1;
             err = 0;
+	    break;
         }
     }
     if (flag) {
         *result = pub;
     } else {
-        err = ENOENT;
+        err = -ENOENT;
     }
     rcu_read_unlock();
     return err;

@@ -12,7 +12,7 @@ enum {
 	NR_node_publish, //Подписаться как отправитель
 	NR_node_unpublish, //Отписаться как отправитель
 	NR_node_send, //Отправить сообщение
-	NR_node_recv, //Принять сообщение
+	NR_node_receive, //Принять сообщение
 	NODE_SYSCALL_COUNT
 };
 
@@ -40,8 +40,8 @@ static int sys_ni_syscall_kretprobe_handler(struct kretprobe_instance *ri, struc
 		regs->ax = ps_node_unpublish((unsigned long)cur->di);
 	} else if (regs->si == inds[NR_node_send]) {
 		regs->ax = ps_node_send((unsigned long)cur->di, (void __user *)cur->si);
-	} else if (regs->si == inds[NR_node_recv]) {
-		regs->ax = ps_node_recv((unsigned long)cur->di, (void __user *)cur->si);
+	} else if (regs->si == inds[NR_node_receive]) {
+		regs->ax = ps_node_receive((unsigned long)cur->di, (void __user *)cur->si);
 	}
 	return 0;
 }

@@ -35,6 +35,7 @@ int create_position_struct(struct ps_position **result) {
     INIT_HLIST_NODE(&(pos->place));
     //pos->cnt = 0;
     //pos->msg_num = 0;
+    *result = pos;
     return 0;
 }
 
