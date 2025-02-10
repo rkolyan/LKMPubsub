@@ -5,7 +5,20 @@
 #include "subscriber.h"
 #include "publisher.h"
 
-struct ps_node;
+//TODO: Можно перенести в файл, так как используется только указатель
+struct ps_node {
+	unsigned long id;
+	struct ps_buffer buf;
+    spinlock_t pos_lock;
+	struct ps_positions_desc desc;
+	struct rw_semaphore node_rwsem;//Для защиты от удаления
+	spinlock_t subs_lock;
+    spinlock_t pubs_lock;
+    struct ps_subscribers_collection subs_coll;
+    struct ps_publishers_collection pubs_coll;
+	struct hlist_node hlist;//Элемент из хеш-таблицы
+};
+
 
 int init_nodes(void);
 int deinit_nodes(void);

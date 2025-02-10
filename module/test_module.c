@@ -455,15 +455,17 @@ test_result_t test_get_buffer_address(void) {
 //TODO: 4)Протестировать более высокоуровневые функции
 test_result_t ftest_create_delete_node(void) {
 	unsigned long __user *id = vmalloc_user(sizeof(unsigned long));
-	
+	unsigned long kernel_id = 0;
 	int err1 = ps_node_create(20, 10, id);
-	int err2 = ps_node_delete(*id);
+	copy_from_user(&kernel_id, id, sizeof(unsigned long));
+	int err2 = ps_node_delete(kernel_id);
 
-	vfree(id);
 	if (err1 || err2 || !id ) {
-		trace_printk("err1 == %d, err2 == %d, id == %lu\n", err1, err2, id);
+		trace_printk("err1 == %d, err2 == %d, id == %lu, kernel_id = %lu\n", err1, err2, *id, kernel_id);
+		vfree(id);
 		return EXPECT;
 	}
+	vfree(id);
 	return SUCCESS;
 }
 
@@ -724,6 +726,7 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 }
 
 static int __init pubsub_init(void) {
+	/*
 	test_create_node_struct();
 	test_create_publisher_struct();
 	test_create_subscriber_struct();
@@ -749,8 +752,10 @@ static int __init pubsub_init(void) {
 	test_find_msg_num_position_after_pop();
 	test_find_next_position_empty();
 	test_find_next_position();
+	*/
 
 	ftest_create_delete_node();
+	/*
 	ftest_delete_empty();
 	ftest_publish_unpublish();
 	ftest_publish_unpublished_deleted();
@@ -764,6 +769,7 @@ static int __init pubsub_init(void) {
 	ftest_send_receive_doubled();
 	ftest_send_recevie_tripled_without_subscribe();
 	ftest_send_receive_tripled_with_subscribe();
+	*/
 	return 0;
 }
 

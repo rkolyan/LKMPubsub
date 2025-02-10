@@ -11,19 +11,6 @@
 
 #define NODE_HASHTABLE_BITS 4
 
-struct ps_node {
-	unsigned long id;
-	struct ps_buffer buf;
-    spinlock_t pos_lock;
-	struct ps_positions_desc desc;
-	struct rw_semaphore node_rwsem;//Для защиты от удаления
-	spinlock_t subs_lock;
-    spinlock_t pubs_lock;
-    struct ps_subscribers_collection subs_coll;
-    struct ps_publishers_collection pubs_coll;
-	struct hlist_node hlist;//Элемент из хеш-таблицы
-};
-
 DEFINE_HASHTABLE(nodes, NODE_HASHTABLE_BITS);
 static rwlock_t nodes_rwlock;
 
@@ -87,8 +74,11 @@ void ps_current_write_wait(struct ps_node *node) {
 }
 
 int get_node_id(struct ps_node *node, unsigned long __user *result) {
-    if (copy_to_user(result, &(node->id), sizeof(unsigned long)) != sizeof(unsigned long))
+size_t read = copy_to_user(result, &(node->id), sizeof(unsigned long));
+    if (read) {
+	trace_printk("read == %lu\n", read);
         return -EAGAIN;
+    }
     return 0;
 }
 
@@ -100,7 +90,7 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 		return -ENOMEM;
 	trace_puts("vzalloc successed!\n");
 	INIT_HLIST_NODE(&(node->hlist));
-	node->id = (unsigned long) &(node->hlist);
+	node->id = (unsigned long) (&(node->hlist));
 	int err = init_buffer(&(node->buf), buf_size, block_size);
 	if (err) {
 		//pr_err(__func__ ":Нельзя выделить памяти для вспомогательной информации ps_buffer!");
@@ -119,15 +109,15 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 int delete_node_struct(struct ps_node *node) {
 	if (!node)
 		return -EINVAL;
-    //trace_printk("%s:before clear_publisher_collection\n", __func__);
+    trace_printk("%s:before clear_publisher_collection\n", __func__);
     clear_publisher_collection(&(node->pubs_coll));
-    //trace_printk("%s:before clear_subscriber_collection\n", __func__);
+    trace_printk("%s:before clear_subscriber_collection\n", __func__);
     clear_subscriber_collection(&(node->subs_coll));
-    //trace_printk("%s:before deinit_positions_desc\n", __func__);
+    trace_printk("%s:before deinit_positions_desc\n", __func__);
     deinit_positions_desc(&(node->desc));
-    //trace_printk("%s:before deinit_buffer\n", __func__);
+    trace_printk("%s:before deinit_buffer\n", __func__);
     deinit_buffer(&(node->buf));
-    //trace_printk("%s:before vfree\n", __func__);
+    trace_printk("%s:before vfree\n", __func__);
     vfree(node);
 
 	return 0;
