@@ -5,7 +5,11 @@
 #include "node.h"
 #include "functions.h"
 
+#ifndef PS_TEST
 long ps_node_create(size_t buf_size, size_t block_size, unsigned long __user *result) {
+#else
+long ps_node_create(size_t buf_size, size_t block_size, unsigned long *result) {
+#endif
 	struct ps_node *node = NULL;
 	trace_printk("BEGIN buf_size = %lu, block_size = %lu, result = %p\n", buf_size, block_size, result);
 	int err = create_node_struct(buf_size, block_size, &node);
@@ -152,7 +156,7 @@ long ps_node_publish(unsigned long node_id) {
 	trace_puts("BEGIN\n");
 	err = create_publisher_struct(pub_id, &pub);
 	trace_printk("after create_publisher_struct pub = %p, err = %d\n", pub, err);
-	if (!err) {
+	if (err) {
 		return err;
 	}
 
@@ -163,7 +167,7 @@ long ps_node_publish(unsigned long node_id) {
 	trace_printk("after find_node node = %p, err = %d\n", node, err);
 	if (!err) {
 		ps_current_read_lock(node);
-	trace_puts("after ps_current_read_lock\n");
+		trace_puts("after ps_current_read_lock\n");
 	}
 	ps_nodes_read_unlock();
 	trace_puts("after ps_nodes_read_unlock\n");
@@ -199,30 +203,34 @@ long ps_node_unpublish(unsigned long node_id) {
 	trace_printk("after find_node node = %p, err = %d\n", node, err);
 	if (!err) {
 		ps_current_read_lock(node);
-	trace_puts("after ps_current_read_lock\n");
+		trace_puts("after ps_current_read_lock\n");
 	}
 	ps_nodes_read_unlock();
 	trace_puts("after ps_nodes_read_unlock\n");
 
 	if (!err) {
 		err = find_publisher_in_node(node, pub_id, &pub);
-	trace_printk("after find_publisher_in_node pub = %p, err = %d\n", pub, err);
+		trace_printk("after find_publisher_in_node pub = %p, err = %d\n", pub, err);
 		if (!err) {
 			remove_publisher_in_node(node, pub);
 		}
 		ps_current_read_unlock(node);
-	trace_puts("after ps_current_read_unlock\n");
+		trace_puts("after ps_current_read_unlock\n");
 	}
 
 	if (!err) {
 		delete_publisher_struct(pub);
-	trace_puts("after delete_publisher_struct\n");
+		trace_puts("after delete_publisher_struct\n");
 	}
 	trace_puts("END\n");
 	return err;
 }
 
+#ifndef PS_TEST
 long ps_node_send(unsigned long node_id, void __user *info) {
+#else
+long ps_node_send(unsigned long node_id, void *info) {
+#endif
 	unsigned long pub_id = current->pid;
 	int err = 0;
 	struct ps_node *node = NULL;
@@ -256,7 +264,11 @@ long ps_node_send(unsigned long node_id, void __user *info) {
 	return err;
 }
 
+#ifndef PS_TEST
 long ps_node_receive(unsigned long node_id, void __user *info) {
+#else
+long ps_node_receive(unsigned long node_id, void *info) {
+#endif
 	unsigned long sub_id = current->pid;
 	int err = 0;
 	struct ps_node *node = NULL;

@@ -33,7 +33,11 @@ void ps_current_read_lock(struct ps_node *node);
 void ps_current_read_unlock(struct ps_node *node);
 void ps_current_write_wait(struct ps_node *node);
 
+#ifndef PS_TEST
 int get_node_id(struct ps_node *node, unsigned long __user *result);
+#else
+int get_node_id(struct ps_node *node, unsigned long *result);
+#endif
 
 int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **result);
 //TODO: ДОДЕЛАТЬ
@@ -54,7 +58,12 @@ int add_publisher_in_node(struct ps_node *node, struct ps_publisher *pub);
 int find_publisher_in_node(struct ps_node *node, pid_t pid, struct ps_publisher **result);
 int remove_publisher_in_node(struct ps_node *node, struct ps_publisher *pub);
 
+#ifndef PS_TEST
 int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void __user *buf);
 int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void __user *buf);
+#else
+int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *buf);
+int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void *buf);
+#endif
 
 #endif

@@ -35,8 +35,13 @@ int is_buffer_access_reading(struct ps_buffer *buf, int msg_num);
 void delete_first_message(struct ps_buffer *buf);
 void create_last_message(struct ps_buffer *buf);
 
+#ifndef PS_TEST
+int write_to_buffer(struct ps_buffer *buf, void *addr, void *info);
+int read_from_buffer(struct ps_buffer *buf, const void *addr, void *info);
+#else
 int write_to_buffer(struct ps_buffer *buf, void *addr, void __user *info);
 int read_from_buffer(struct ps_buffer *buf, const void *addr, void __user *info);
+#endif
 
 int get_buffer_begin_num(struct ps_buffer *buf);
 int get_buffer_end_num(struct ps_buffer *buf);

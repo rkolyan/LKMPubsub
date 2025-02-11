@@ -1,6 +1,12 @@
-#include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/rculist.h>
+
+#ifndef PS_TEST
+#include <linux/uaccess.h>
+#else
+#include <linux/fortify-string.h>
+#endif
+
 
 #include "buffer.h"
 
@@ -12,15 +18,15 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 	buf->base_begin = vzalloc(final_size);
 	if (!buf->base_begin)
 		return -ENOMEM;
-    //Конечный адрес должен быть включен
-    //TODO: Тут конченая хуйня с char
+	//Конечный адрес должен быть включен
+	//TODO: Тут конченая хуйня с char
 	buf->base_end = ((char *)buf->base_begin) + final_size - blk_size;
 	buf->begin = buf->base_begin;
 	buf->end = buf->base_begin;
 	buf->base_begin_num = 0;
 	buf->begin_num = 0;
 	buf->end_num = 0;
-    buf->end_read_num = 0;
+	buf->end_read_num = 0;
 	buf->buf_size = buf_size;
 	buf->blk_size = blk_size;
 	return 0;
@@ -42,9 +48,9 @@ int is_buffer_full(struct ps_buffer *buf) {
 }
 
 int is_buffer_access_reading(struct ps_buffer *buf, int msg_num) {
-    if (msg_num - buf->begin_num < 0 || buf->end_read_num - msg_num <= 0)
-        return 0;
-    return 1;
+	if (msg_num - buf->begin_num < 0 || buf->end_read_num - msg_num <= 0)
+		return 0;
+	return 1;
 }
 
 /*
@@ -55,35 +61,43 @@ int is_buffer_access_reading(struct ps_buffer *buf, int msg_num) {
  */
 
 void delete_first_message(struct ps_buffer *buf) {
-    if (buf->begin != buf->base_end)
-        buf->begin += buf->blk_size;
-    else
-        buf->begin = buf->base_begin;
-    buf->begin_num++;
+	if (buf->begin != buf->base_end)
+		buf->begin += buf->blk_size;
+	else
+		buf->begin = buf->base_begin;
+	buf->begin_num++;
 }
 
 void create_last_message(struct ps_buffer *buf) {
-    if (buf->end != buf->base_end) {
-        buf->end += buf->blk_size;
-    } else {
-        buf->end = buf->base_begin;
-        buf->base_begin_num = buf->end_num;
-    }
-    buf->end_num++;
+	if (buf->end != buf->base_end) {
+		buf->end += buf->blk_size;
+	} else {
+		buf->end = buf->base_begin;
+		buf->base_begin_num = buf->end_num;
+	}
+	buf->end_num++;
 }
 
+#ifndef PS_TEST
 int write_to_buffer(struct ps_buffer *buf, void *addr, void __user *user_info) {
+#else
+int write_to_buffer(struct ps_buffer *buf, void *addr, void *user_info) {
+#endif
 	if (!buf || !user_info || !addr)
 		return -EINVAL;
-	size_t n = copy_from_user(addr, user_info, buf->blk_size);
-	if (n != buf->blk_size)
+#ifndef PS_TEST
+	if (copy_from_user(addr, user_info, buf->blk_size)) {
+#else
+	if (!memcpy(addr, user_info, buf->blk_size)){
+#endif
 		return -EFAULT;
+	}
 	return 0;
 }
 
 void *get_buffer_address(const struct ps_buffer *buf, int msg_num) {
-    //TODO: Вот здесь опасная зона
-    void *addr = NULL;
+	//TODO: Вот здесь опасная зона
+	void *addr = NULL;
 	if (buf->begin < buf->end) {
 		if (buf->begin_num >= 0 && buf->end_num >= 0) {
 			addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
@@ -122,7 +136,7 @@ void *get_buffer_address(const struct ps_buffer *buf, int msg_num) {
 					if (buf->base_begin_num <= msg_num) {
 						addr = buf->base_begin + (msg_num - buf->base_begin_num) * buf->blk_size;
 					} else {
-                        addr = buf->base_end - (buf->base_begin_num - msg_num - 1) * buf->blk_size;//buf->base_end осторожней с ней
+						addr = buf->base_end - (buf->base_begin_num - msg_num - 1) * buf->blk_size;//buf->base_end осторожней с ней
 					}
 				}
 			}
@@ -136,34 +150,42 @@ void *get_buffer_address(const struct ps_buffer *buf, int msg_num) {
 	return addr;
 }
 
+#ifndef PS_TEST
 int read_from_buffer(struct ps_buffer *buf, const void *addr, void __user *user_info) {
+#else
+int read_from_buffer(struct ps_buffer *buf, const void *addr, void *user_info) {
+#endif
 	if (!buf || !user_info)
 		return -EINVAL;
-	if (copy_to_user(user_info, addr, buf->blk_size) != buf->blk_size) {
-        return -EFAULT;
-    }
+#ifndef PS_TEST
+	if (copy_to_user(user_info, addr, buf->blk_size)) {
+#else
+	if (!memcpy(user_info, addr, buf->blk_size)) {
+#endif
+		return -EFAULT;
+	}
 	return 0;
 }
 
 int get_buffer_begin_num(struct ps_buffer *buf) {
-    return buf->begin_num;
+	return buf->begin_num;
 }
 
 int get_buffer_end_num(struct ps_buffer *buf) {
-    return buf->end_num;
+	return buf->end_num;
 }
 
 inline void set_prohibition_num(struct ps_prohibition *proh, int msg_num) {
-    proh->msg_num = msg_num;
+	proh->msg_num = msg_num;
 }
 
 void prohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
-    list_add_tail_rcu(&(proh->list), &(buf->prohibited));
+	list_add_tail_rcu(&(proh->list), &(buf->prohibited));
 }
 
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
-    if (proh == list_first_entry_or_null(&(buf->prohibited), struct ps_prohibition, list)) {
-        buf->end_read_num = proh->msg_num;
-    }
-    list_del_rcu(&proh->list);
+	if (proh == list_first_entry_or_null(&(buf->prohibited), struct ps_prohibition, list)) {
+		buf->end_read_num = proh->msg_num;
+	}
+	list_del_rcu(&proh->list);
 }
