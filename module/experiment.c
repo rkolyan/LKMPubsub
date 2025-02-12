@@ -4,34 +4,23 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/sched/mm.h>
+#include <linux/hashtable.h>
 
 MODULE_AUTHOR("Golovnev Nikolay");
 MODULE_DESCRIPTION("PubSub");
 MODULE_LICENSE("GPL");
 
+struct some_struct {
+	int num;
+	struct hlist_node hlist;
+};
+
 static int __init pubsub_init(void) {
-	struct mm_struct *mm = NULL;
-	unsigned long number1 = 100, number2 = 200;
-	unsigned long __user *user_buf = NULL;
-
-	mm = mm_alloc();
-	if (!mm) {
-		trace_printk("mm not allocated!\n");
-		return 0;
-	}
-
-	user_buf = (unsigned long __user *)vmalloc_user(PAGE_SIZE);
-
-	use_mm(mm);
-
-	unsigned long read1 = copy_to_user(user_buf, &number1, sizeof(unsigned long));
-	unsigned long read2 = copy_from_user(&number2, user_buf, sizeof(unsigned long));
-
-	unuse_mm(mm);
-	trace_printk("hello: *user_buf == %lu, number1 = %lu, number2 = %lu, read1 = %lu, read2 = %lu\n", *user_buf, number1, number2, read1, read2);
-
-	vfree(user_buf);
-	mmput(mm);
+	DEFINE_HASHTABLE(some, 3);
+	struct some_struct *ps = vmalloc(sizeof(struct some_struct));
+	ps->num = 3;
+	hash_add_rcu(some, &(ps->hlist), ps->num);
+	synchronize_rcu();
 	return 0;
 }
 

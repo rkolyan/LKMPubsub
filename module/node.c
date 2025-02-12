@@ -5,7 +5,8 @@
 #include "node.h"
 
 
-#include <linux/rwsem.h>
+//#include <linux/rwsem.h>
+#include <linux/rwlock.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
 
@@ -55,29 +56,36 @@ void ps_nodes_write_unlock(void) {
 }
 
 void ps_current_read_lock(struct ps_node *node) {
-	down_read(&(node->node_rwsem));
+	//down_read(&(node->node_rwsem));
+	read_lock(&(node->node_rwsem));
 }
 
 void ps_current_read_unlock(struct ps_node *node) {
-	up_read(&(node->node_rwsem));
+	//up_read(&(node->node_rwsem));
+	read_unlock(&(node->node_rwsem));
 }
 
 void ps_current_write_wait(struct ps_node *node) {
 	trace_printk("before down_write, node=%p, &(node->node_rwsem)=%p\n", node, &(node->node_rwsem));
-	mdelay(10);
-	down_write(&(node->node_rwsem));
+	//down_write(&(node->node_rwsem));
+	write_lock(&(node->node_rwsem));
 	trace_puts("after down_write\n");
-	mdelay(10);
-	up_write(&(node->node_rwsem));
-	mdelay(10);
+	//up_write(&(node->node_rwsem));
+	write_unlock(&(node->node_rwsem));
 	trace_puts("after up_write\n");
 }
 
 #ifndef PS_TEST
 int get_node_id(struct ps_node *node, unsigned long __user *result) {
-	if (copy_to_user(result, &(node->id), sizeof(unsigned long))) {
 #else
 int get_node_id(struct ps_node *node, unsigned long *result) {
+#endif
+	if (!node || !result) {
+		return -EINVAL;
+	}
+#ifndef PS_TEST
+	if (copy_to_user(result, &(node->id), sizeof(unsigned long))) {
+#else
 	if (!memcpy(result, &(node->id), sizeof(unsigned long))) {
 #endif
 		return -EAGAIN;
@@ -103,7 +111,8 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	init_positions_desc(&(node->desc));
 	init_publisher_collection(&(node->pubs_coll));
 	init_subscriber_collection(&(node->subs_coll));
-	init_rwsem(&(node->node_rwsem));
+	//init_rwsem(&(node->node_rwsem));
+	rwlock_init(&(node->node_rwsem));
 	*result = node;
 	trace_puts("vzalloc ended!\n");
 	return 0;
@@ -229,8 +238,7 @@ int add_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
 int find_publisher_in_node(struct ps_node *node, pid_t pid, struct ps_publisher **result) {
 	if (!node || pid < 0 || !result)
 		return -EINVAL;
-	int err = 0;
-	err = find_publisher(&(node->pubs_coll), pid, result);
+	int err = find_publisher(&(node->pubs_coll), pid, result);
 	return err;
 }
 

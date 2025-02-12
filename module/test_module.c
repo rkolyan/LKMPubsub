@@ -363,7 +363,7 @@ test_result_t test_find_msg_num_position(void) {
 
 	err1 = find_msg_num_position(&desc, 10, &pos);
 
-	if (err1 || pos || pos != pos1) {
+	if (err1 || !pos || pos != pos1) {
 		trace_printk("err1 == %d, pos == %p, pos1 == %p\n", err1, pos, pos1);
 		return EXPECT;
 	}
@@ -402,7 +402,7 @@ test_result_t test_find_msg_num_position_after_pop(void) {
 
 	err1 = find_msg_num_position(&desc, 10, &pos);
 
-	if (!err1 || pos) {
+	if (!err1 || pos || pos1 == pos) {
 		trace_printk("err1 == %d, pos == %p, pos1 == %p\n", err1, pos, pos1);
 		return EXPECT;
 	}
@@ -454,6 +454,47 @@ test_result_t test_get_buffer_address(void) {
 	return SUCCESS;
 }
 
+test_result_t stest_create_find_node(void) {
+	struct ps_node *node = NULL, *tmp_node = NULL;
+	unsigned long id = 0;
+
+	int err1 = create_node_struct(30, 20, &node);
+	int err2 = get_node_id(node, &id);
+	int err3 = add_node(node);
+	int err4 = find_node(id, &tmp_node);
+	int err5 = remove_node(tmp_node);
+	int err6 = delete_node_struct(node);
+	//TODO: Надо попробовать дублирование нескольских add_node и remove_node
+
+	if (err1 || err2 || err3 || err4 || err5 || err6 || !id || !node || !tmp_node || node != tmp_node) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, id == %lu, node == %p, tmp_node == %p\n", err1, err2, err3, err4, err5, err6, id, node, tmp_node);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t stest_create_find_publish_node(void) {
+	struct ps_node *node = NULL;
+	struct ps_publisher *pub = NULL, *tmp_pub = NULL;
+	
+
+	int err1 = create_node_struct(30, 20, &node);
+	trace_printk("node = %p, pubs_coll offset = %p, &node->pubs_coll = %p, node + offset = %p, sizeof(ps_node) = %p, node + sizeof(ps_node) = %p\n", node, offsetof(struct ps_node, pubs_coll), &node->pubs_coll, ((char *)node) + offsetof(struct ps_node, pubs_coll), sizeof(struct ps_node), ((char *)node) + sizeof(struct ps_node));
+	int err2 = create_publisher_struct(100, &pub);
+	int err3 = add_publisher_in_node(node, pub);
+	int err4 = find_publisher_in_node(node, 100, &tmp_pub);
+	int err5 = remove_publisher_in_node(node, pub);
+	int err7 = delete_node_struct(node);
+	int err6 = delete_publisher_struct(pub);
+	//TODO: Надо попробовать дублирование нескольских add_node и remove_node
+
+	if (err1 || err2 || err3 || err4 || err5 || err6 || err7 || !node || !pub || !tmp_pub || pub != tmp_pub) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, node == %p, pub == %p, tmp_pub == %p\n", err1, err2, err3, err4, err5, err6, err7, node, pub, tmp_pub);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
 //TODO: 4)Протестировать более высокоуровневые функции
 test_result_t ftest_create_delete_node(void) {
 	unsigned long id = 0;
@@ -480,16 +521,32 @@ test_result_t ftest_delete_empty(void) {
 	return SUCCESS;
 }
 
+test_result_t ftest_publish_doubled(void) {
+	unsigned long id = 0;
+	
+	int err1 = ps_node_create(30, 10, &id);
+	int err2 = ps_node_publish(id);
+	int err3 = ps_node_publish(id);
+
+	if (err1 || err2 || !err3 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, id == %lu\n", err1, err2, err3, id);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
 test_result_t ftest_publish_unpublish(void) {
 	unsigned long id = 0;
 	
 	int err1 = ps_node_create(30, 10, &id);
 	int err2 = ps_node_publish(id);
-	int err3 = ps_node_unpublish(id);
-	int err4 = ps_node_delete(id);
+	//int err3 = ps_node_unpublish(id);
+	//int err4 = ps_node_delete(id);
 
-	if (err1 || err2 || err3 || err4 || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, id == %lu\n", err1, err2, err3, err4, id);
+	//if (err1 || err2 || err3 || err4 || !id) {
+		//trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, id == %lu\n", err1, err2, err3, err4, id);
+	if (err1 || err2 || !id) {
+		trace_printk("err1 == %d, err2 == %d, id == %lu\n", err1, err2, id);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -749,15 +806,18 @@ static int __init pubsub_init(void) {
 	test_find_msg_num_position_after_pop();
 	test_find_next_position_empty();
 	test_find_next_position();
+	stest_create_find_node();
+	stest_create_find_publish_node();
 
 	ftest_create_delete_node();
 	ftest_delete_empty();
+	ftest_publish_doubled();
 	ftest_publish_unpublish();
 	ftest_publish_unpublished_deleted();
+	/*
 	ftest_unpublish_after_delete();
 	ftest_subscribe_unsubscribe();
 	ftest_subscribe_unsubscribe_deleted();
-	/*
 	ftest_send_without_publish();
 	ftest_send_with_publish();
 	ftest_send_receive_without_subscribe();

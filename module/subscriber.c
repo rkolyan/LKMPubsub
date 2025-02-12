@@ -61,6 +61,7 @@ int remove_subscriber(struct ps_subscribers_collection *coll, struct ps_subscrib
     if (!coll || !sub)
         return -EINVAL;
     hash_del_rcu(&(sub->hlist));
+    //synchronize_rcu
     return 0;
 }
 

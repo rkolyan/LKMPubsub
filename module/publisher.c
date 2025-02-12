@@ -30,8 +30,8 @@ int find_publisher(struct ps_publishers_collection *coll, pid_t pid, struct ps_p
         return -EINVAL;
     struct ps_publisher *pub = NULL;
     char flag = 0;
-    rcu_read_lock();
     int err = 0;
+    rcu_read_lock();
     hash_for_each_possible_rcu(coll->pubs, pub, hlist, pid) {
         if (pub->pid == pid) {
             flag = 1;
@@ -52,7 +52,8 @@ int add_publisher(struct ps_publishers_collection *coll, struct ps_publisher *pu
     if (!coll || !pub)
         return -EINVAL;
     hash_add_rcu(coll->pubs, &(pub->hlist), pub->pid);
-    synchronize_rcu();
+    //TODO: Причиной крахов внезапно является synchronize_rcu
+    //synchronize_rcu();
     return 0;
 }
 
@@ -60,7 +61,8 @@ int remove_publisher(struct ps_publishers_collection *coll, struct ps_publisher 
     if (!coll || !pub)
         return -EINVAL;
     hash_del_rcu(&(pub->hlist));
-    synchronize_rcu();
+    //TODO: Причиной крахов внезапно является synchronize_rcu, скорее всего
+    //synchronize_rcu();
     return 0;
 }
 

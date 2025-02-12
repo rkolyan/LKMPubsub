@@ -155,7 +155,7 @@ int read_from_buffer(struct ps_buffer *buf, const void *addr, void __user *user_
 #else
 int read_from_buffer(struct ps_buffer *buf, const void *addr, void *user_info) {
 #endif
-	if (!buf || !user_info)
+	if (!buf || !addr || !user_info)
 		return -EINVAL;
 #ifndef PS_TEST
 	if (copy_to_user(user_info, addr, buf->blk_size)) {

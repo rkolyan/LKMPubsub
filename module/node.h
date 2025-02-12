@@ -11,7 +11,8 @@ struct ps_node {
 	struct ps_buffer buf;
     spinlock_t pos_lock;
 	struct ps_positions_desc desc;
-	struct rw_semaphore node_rwsem;//Для защиты от удаления
+	//struct rw_semaphore node_rwsem;//Для защиты от удаления
+	rwlock_t node_rwsem;
 	spinlock_t subs_lock;
     spinlock_t pubs_lock;
     struct ps_subscribers_collection subs_coll;
