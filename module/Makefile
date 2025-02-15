@@ -2,7 +2,7 @@
 #pubsub-objs += buffer.o position.o subscriber.o publisher.o node.o functions.o syscalls.o pubsub_module.o
 
 obj-m += test_pubsub.o
-test_pubsub-objs += test_module.o buffer.o position.o subscriber.o publisher.o node.o functions.o
+test_pubsub-objs += buffer.o position.o subscriber.o publisher.o node.o functions.o test_module.o
 
 #obj-m += experiment.o
 

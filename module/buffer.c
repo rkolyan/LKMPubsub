@@ -7,7 +7,6 @@
 #include <linux/fortify-string.h>
 #endif
 
-
 #include "buffer.h"
 
 //end_num - индекс, указывающий на ячейку, в которую будет записано новое сообщение
@@ -19,8 +18,8 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 	if (!buf->base_begin)
 		return -ENOMEM;
 	//Конечный адрес должен быть включен
-	//TODO: Тут конченая хуйня с char
-	buf->base_end = ((char *)buf->base_begin) + final_size - blk_size;
+	INIT_LIST_HEAD(&buf->prohibited);
+	buf->base_end = buf->base_begin + final_size - blk_size;
 	buf->begin = buf->base_begin;
 	buf->end = buf->base_begin;
 	buf->base_begin_num = 0;
@@ -48,8 +47,11 @@ int is_buffer_full(struct ps_buffer *buf) {
 }
 
 int is_buffer_access_reading(struct ps_buffer *buf, int msg_num) {
-	if (msg_num - buf->begin_num < 0 || buf->end_read_num - msg_num <= 0)
+	if (msg_num - buf->begin_num < 0 || buf->end_read_num - msg_num <= 0) {
+		trace_printk("%d and %d\n", msg_num - buf->begin_num, buf->end_read_num - msg_num);
 		return 0;
+	}
+	trace_puts("Its norm\n");
 	return 1;
 }
 
@@ -179,13 +181,17 @@ inline void set_prohibition_num(struct ps_prohibition *proh, int msg_num) {
 	proh->msg_num = msg_num;
 }
 
+inline void prohibition_init(struct ps_prohibition *proh) {
+	INIT_LIST_HEAD(&proh->list);
+}
+
 void prohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
 	list_add_tail_rcu(&(proh->list), &(buf->prohibited));
 }
 
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
 	if (proh == list_first_entry_or_null(&(buf->prohibited), struct ps_prohibition, list)) {
-		buf->end_read_num = proh->msg_num;
+		buf->end_read_num = proh->msg_num + 1;
 	}
 	list_del_rcu(&proh->list);
 }

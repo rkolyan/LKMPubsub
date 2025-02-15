@@ -15,7 +15,6 @@ struct ps_buffer {
     int end_num;//Номер конца сообщений (номер БУДУЩЕГО НОВОГО СООБЩЕНИЯ)
     size_t blk_size;
     size_t buf_size;
-    int flag;
 };
 
 struct ps_prohibition {
@@ -46,6 +45,7 @@ int read_from_buffer(struct ps_buffer *buf, const void *addr, void *info);
 int get_buffer_begin_num(struct ps_buffer *buf);
 int get_buffer_end_num(struct ps_buffer *buf);
 
+void prohibition_init(struct ps_prohibition *proh);
 void prohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh);
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh);
 

@@ -13,6 +13,7 @@ int create_publisher_struct(pid_t pid, struct ps_publisher **result) {
     if (!pub)
         return -ENOMEM;
     INIT_HLIST_NODE(&(pub->hlist));
+    prohibition_init(&(pub->proh));
     pub->pid = pid;
     *result = pub;
     return 0;
@@ -52,8 +53,6 @@ int add_publisher(struct ps_publishers_collection *coll, struct ps_publisher *pu
     if (!coll || !pub)
         return -EINVAL;
     hash_add_rcu(coll->pubs, &(pub->hlist), pub->pid);
-    //TODO: Причиной крахов внезапно является synchronize_rcu
-    //synchronize_rcu();
     return 0;
 }
 
@@ -61,12 +60,16 @@ int remove_publisher(struct ps_publishers_collection *coll, struct ps_publisher 
     if (!coll || !pub)
         return -EINVAL;
     hash_del_rcu(&(pub->hlist));
-    //TODO: Причиной крахов внезапно является synchronize_rcu, скорее всего
     //synchronize_rcu();
+    //По идее не должно быть такого, что найденный publisher будет использоваться дважды, потому что pub->pub_id == current_pid, то есть только текущий процесс может найти этот publisher, но при поиске может временно использоваться его структура
     return 0;
 }
 
-//Вызываются только одним потоком, поэтому hash-функции
+inline struct ps_prohibition *get_publisher_prohibition(struct ps_publisher *pub) {
+    return &(pub->proh);
+}
+
+//Следующие функции вызываются только одним потоком, поэтому hash-функции без RCU-защиты
 void init_publisher_collection(struct ps_publishers_collection *coll) {
     hash_init(coll->pubs);
 }
@@ -82,8 +85,4 @@ int clear_publisher_collection(struct ps_publishers_collection *coll) {
         delete_publisher_struct(pub);
     }
     return 0;
-}
-
-inline struct ps_prohibition *get_publisher_prohibition(struct ps_publisher *pub) {
-    return &(pub->proh);
 }

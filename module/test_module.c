@@ -3,8 +3,6 @@
 #include <linux/init.h>
 #include <linux/vmalloc.h>
 
-#define PS_TEST
-
 #include "node.h"
 #include "publisher.h"
 #include "subscriber.h"
@@ -82,7 +80,7 @@ test_result_t test_init_buffer_struct(void) {
 
 	if (err || buf.base_begin != buf.begin || buf.begin != buf.end || buf.blk_size != 10 || buf.buf_size != 20 || buf.base_end - buf.base_begin != (buf.buf_size - 1) * (buf.blk_size) || buf.begin_num != 0 || buf.end_num != 0 || buf.base_begin_num != 0) {
 		trace_printk("err == %d, begin == %p, end == %p, base_begin == %p, base_end == %p, begin_num == %d, end_num == %d, base_begin_num == %d, buf_size == %lu, blk_size == %lu\n", err, buf.begin, buf.end, buf.base_begin, buf.base_end, buf.begin_num, buf.end_num, buf.base_begin_num, buf.buf_size, buf.blk_size);
-		trace_printk("base_end - base_begin = %d, buf_size * blk_size = %lu\n", buf.base_end - buf.base_begin, (buf.buf_size - 1) * buf.blk_size);
+		trace_printk("base_end - base_begin = %ld, buf_size * blk_size = %lu\n", buf.base_end - buf.base_begin, (buf.buf_size - 1) * buf.blk_size);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -448,26 +446,126 @@ test_result_t test_find_next_position(void) {
 
 //TODO: 3)Протестировать буферные функции чтения и записи
 //TODO:
-test_result_t test_get_buffer_address(void) {
+test_result_t test_write_buffer_simple(void) {
+	char str[3] = {'a', 'b', 'c'};
 	struct ps_buffer buf;
-	init_buffer(&buf, 10, 20);
+	
+	int err1 = init_buffer(&buf, 1, 3);
+	int msg_num = get_buffer_begin_num(&buf);
+	void *addr = get_buffer_address(&buf, msg_num);
+	int err2 = write_to_buffer(&buf, addr, str);
+
+	if (err1 || err2 || msg_num != 0 || !addr || addr != buf.base_begin || !(((char *)buf.base_begin)[0] == 'a' && ((char *)buf.base_begin)[1] == 'b' && ((char *)buf.base_begin)[2] == 'c')) {
+		trace_printk("err1 == %d, err2 == %d, addr = %p, base_begin = %p, msg_num = %d, base = %3s\n", err1, err2, addr, buf.base_begin, msg_num, (char *)buf.base_begin);
+		return EXPECT;
+	}
+
 	return SUCCESS;
 }
 
-test_result_t stest_create_find_node(void) {
+#define BBBLOCK_SSSIZE 2
+
+test_result_t test_get_buffer_address_begin_end_less_bigger(void) {
+	struct ps_buffer buf;
+
+	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
+	deinit_buffer(&buf);
+	buf.base_begin_num = -1;
+	buf.begin_num = 2;
+	buf.begin = buf.base_begin + (buf.begin_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
+	buf.end_num = 4;
+	buf.end = buf.base_begin + (buf.end_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
+
+	void *addr1 = get_buffer_address(&buf, 4);
+	//void *addr2 = get_buffer_address(&buf, 6);TODO: По идее таких случаев быть не должно... 
+	void *addr3 = get_buffer_address(&buf, 1);
+
+	if (addr1 != ((char *)buf.base_end) || addr3 != ((char *)buf.base_begin) + 2 * BBBLOCK_SSSIZE) {
+		trace_printk("addr1 = %p, addr3 = %p, buf.base_end = %p, buf.base_begin + 2BLOCK - addr3 = %ld\n", addr1, addr3, buf.base_end, ((char *)buf.base_begin) + 2 * BBBLOCK_SSSIZE - (char*) addr3);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t test_get_buffer_address_begin_end_bigger_less(void) {
+	struct ps_buffer buf;
+
+	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
+	deinit_buffer(&buf);
+	buf.base_begin_num = 0x7FFFFFFF - 3;
+	buf.begin_num = 0x7FFFFFFF - 1;
+	buf.begin = buf.base_begin + (buf.begin_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
+	buf.end_num = 0x7FFFFFFF + 2;
+	buf.end = buf.base_begin + 5 * BBBLOCK_SSSIZE;
+
+	void *addr1 = get_buffer_address(&buf, 0x7FFFFFFF + 1);
+	void *addr2 = get_buffer_address(&buf, 0x7FFFFFFF - 2);
+
+	if (addr1 != ((char *)buf.base_begin) + 4 * BBBLOCK_SSSIZE || addr2 != ((char *)buf.base_begin) + 1 * BBBLOCK_SSSIZE) {
+		trace_printk("addr1 = %p, addr2 = %p, diff1 = %ld, diff2 = %ld\n", addr1, addr2, ((char *)buf.begin) + 4 * BBBLOCK_SSSIZE - (char *)addr1, ((char *)buf.begin) + 1 * BBBLOCK_SSSIZE - (char *)addr2);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t test_get_buffer_address_end_begin_less_bigger(void) {
+	struct ps_buffer buf;
+
+	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
+	deinit_buffer(&buf);
+	buf.base_begin_num = 8;
+	buf.begin_num = 6;
+	buf.begin = buf.base_end - BBBLOCK_SSSIZE;
+	buf.end_num = 9;
+	//T.O: Можно сделать типо buf->end_num - buf->begin_base_num % (base_end_num - base_begin_num);
+	buf.end = buf.base_begin + BBBLOCK_SSSIZE;
+
+	void *addr1 = get_buffer_address(&buf, 8);
+	void *addr2 = get_buffer_address(&buf, 7);
+
+	if (addr1 != buf.base_begin || addr2 != buf.base_end) {
+		trace_printk("addr1 = %p, addr2 = %p, base_begin = %p, base_end = %p\n", addr1, addr2, buf.base_begin, buf.base_end);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t test_get_buffer_address_end_begin_bigger_less(void) {
+	struct ps_buffer buf;
+
+	init_buffer(&buf, 10, BBBLOCK_SSSIZE);
+	deinit_buffer(&buf);
+	buf.base_begin_num = 0x7FFFFFFF - 1;
+	buf.begin_num = 0x7FFFFFFF - 3;
+	buf.begin = buf.base_end - 1 * BBBLOCK_SSSIZE;
+	buf.end_num = 0x7FFFFFFF + 2;
+	buf.end = buf.base_begin + 3 * BBBLOCK_SSSIZE;
+
+	void *addr1 = get_buffer_address(&buf, 0x7FFFFFFF - 2);
+	void *addr2 = get_buffer_address(&buf, 0x7FFFFFFF - 1);
+
+	if (addr1 != buf.base_end || addr2 != buf.base_begin) {
+		trace_printk("addr1 = %p, addr2 = %p\n", addr1, addr2);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t stest_create_acquire_node(void) {
 	struct ps_node *node = NULL, *tmp_node = NULL;
 	unsigned long id = 0;
 
 	int err1 = create_node_struct(30, 20, &node);
 	int err2 = get_node_id(node, &id);
 	int err3 = add_node(node);
-	int err4 = find_node(id, &tmp_node);
-	int err5 = remove_node(tmp_node);
-	int err6 = delete_node_struct(node);
+	int err4 = acquire_node(id, &tmp_node);
+	int err5 = release_node(tmp_node);
+	int err6 = remove_node(tmp_node);
+	int err7 = delete_node_struct(node);
 	//TODO: Надо попробовать дублирование нескольских add_node и remove_node
 
-	if (err1 || err2 || err3 || err4 || err5 || err6 || !id || !node || !tmp_node || node != tmp_node) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, id == %lu, node == %p, tmp_node == %p\n", err1, err2, err3, err4, err5, err6, id, node, tmp_node);
+	if (err1 || err2 || err3 || err4 || err5 || err6 || err7 || !id || !node || !tmp_node || node != tmp_node) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 = %d, id == %lu, node == %p, tmp_node == %p\n", err1, err2, err3, err4, err5, err6, err7, id, node, tmp_node);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -479,17 +577,60 @@ test_result_t stest_create_find_publish_node(void) {
 	
 
 	int err1 = create_node_struct(30, 20, &node);
-	trace_printk("node = %p, pubs_coll offset = %p, &node->pubs_coll = %p, node + offset = %p, sizeof(ps_node) = %p, node + sizeof(ps_node) = %p\n", node, offsetof(struct ps_node, pubs_coll), &node->pubs_coll, ((char *)node) + offsetof(struct ps_node, pubs_coll), sizeof(struct ps_node), ((char *)node) + sizeof(struct ps_node));
 	int err2 = create_publisher_struct(100, &pub);
 	int err3 = add_publisher_in_node(node, pub);
 	int err4 = find_publisher_in_node(node, 100, &tmp_pub);
 	int err5 = remove_publisher_in_node(node, pub);
-	int err7 = delete_node_struct(node);
-	int err6 = delete_publisher_struct(pub);
+	int err6 = delete_node_struct(node);
+	int err7 = delete_publisher_struct(pub);
 	//TODO: Надо попробовать дублирование нескольских add_node и remove_node
 
 	if (err1 || err2 || err3 || err4 || err5 || err6 || err7 || !node || !pub || !tmp_pub || pub != tmp_pub) {
 		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, node == %p, pub == %p, tmp_pub == %p\n", err1, err2, err3, err4, err5, err6, err7, node, pub, tmp_pub);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
+test_result_t stest_buffer(void) {
+	struct ps_buffer buf;
+	struct ps_publisher *pub = NULL;
+	struct ps_position *pos = NULL;
+	int msg_num = 0;
+	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
+	char input[20] = {'\0'};
+
+	//TODO: Надо с разными числами поиграться (менять в msg_num)
+	//1)Инициализировать все данные
+	int err1 = create_position_struct(&pos);
+	int err2 = create_publisher_struct(current->pid, &pub);
+	int err3 = init_buffer(&buf, 3, 20);
+	//2)Написать сообщение в буфер
+	int flag = is_buffer_full(&buf);
+	void *addr = get_buffer_address(&buf, msg_num);
+	set_prohibition_num(&pub->proh, msg_num);
+	prohibit_buffer(&buf, &pub->proh);
+	create_last_message(&buf);
+	int err6 = write_to_buffer(&buf, addr, output);
+	//TODO: Надо посмотреть как будут в перемешку c операциями чтения работать
+	unprohibit_buffer(&buf, &pub->proh);
+
+	//3)Получение сообщения
+	int err8 = is_buffer_access_reading(&buf, msg_num);
+	void *addr2 = get_buffer_address(&buf, msg_num);
+	int err9 = read_from_buffer(&buf, addr, input);
+	//TODO: В самой функции удаляется позиция и последнее сообщение после прочтения
+	trace_printk("msg_num = %d, begin_num = %d, end_read_num = %d\n", msg_num, buf.begin_num, buf.end_read_num);
+
+	//4)Удаление всех данных
+	int err10 = delete_position_struct(pos);
+	int err11 = delete_publisher_struct(pub);
+	int err12 = deinit_buffer(&buf);
+
+	if (err1 || err2 || err3 || flag || !addr || err6 || !err8 || err9 || err10 || err11 || err12 || !addr2 || addr != addr2) {
+		trace_printk("err1 = %d, err2 = %d, err3 = %d, pub = %p, pos = %p\n", err1, err2, err3, pub, pos);
+		trace_printk("err6 = %d, flag = %d, addr = %p\n", err6, flag, addr);
+		trace_printk("err8 = %d, err9 = %d, err10 = %d, err11 = %d, err12 = %d, addr2 = %p\n", err8, err9, err10, err11, err12, addr2);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -527,9 +668,10 @@ test_result_t ftest_publish_doubled(void) {
 	int err1 = ps_node_create(30, 10, &id);
 	int err2 = ps_node_publish(id);
 	int err3 = ps_node_publish(id);
+	int err4 = ps_node_delete(id);
 
-	if (err1 || err2 || !err3 || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, id == %lu\n", err1, err2, err3, id);
+	if (err1 || err2 || !err3 || err4 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, id == %lu\n", err1, err2, err3, err4, id);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -540,13 +682,11 @@ test_result_t ftest_publish_unpublish(void) {
 	
 	int err1 = ps_node_create(30, 10, &id);
 	int err2 = ps_node_publish(id);
-	//int err3 = ps_node_unpublish(id);
-	//int err4 = ps_node_delete(id);
+	int err3 = ps_node_unpublish(id);
+	int err4 = ps_node_delete(id);
 
-	//if (err1 || err2 || err3 || err4 || !id) {
-		//trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, id == %lu\n", err1, err2, err3, err4, id);
-	if (err1 || err2 || !id) {
-		trace_printk("err1 == %d, err2 == %d, id == %lu\n", err1, err2, id);
+	if (err1 || err2 || err3 || err4 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, id == %lu\n", err1, err2, err3, err4, id);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -606,7 +746,7 @@ test_result_t ftest_subscribe_unsubscribe_deleted(void) {
 	int err4 = ps_node_unsubscribe(id);
 	int err5 = ps_node_delete(id);
 
-	if (err1 || err2 || err3 || err4 || err5 || !id) {
+	if (err1 || err2 || !err3 || !err4 || !err5 || !id) {
 		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, id == %lu\n", err1, err2, err3, err4, err5, id);
 		return EXPECT;
 	}
@@ -621,7 +761,7 @@ test_result_t ftest_send_without_publish(void) {
 	int err2 = ps_node_send(id, buf);
 	int err3 = ps_node_delete(id);
 
-	if (err1 || !err2 || err3 || id) {
+	if (err1 || !err2 || err3 || !id) {
 		trace_printk("err1 == %d, err2 == %d, err3 == %d, id == %lu\n", err1, err2, err3, id);
 		return EXPECT;
 	}
@@ -631,6 +771,7 @@ test_result_t ftest_send_without_publish(void) {
 test_result_t ftest_send_with_publish(void) {
 	unsigned long id = 0;
 	char buf[10] = "091234567";
+	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -648,6 +789,7 @@ test_result_t ftest_send_receive_without_subscribe(void) {
 	unsigned long id = 0;
 	char output[10] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8'};
 	char input[10] = {'\0'};
+	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -673,6 +815,7 @@ test_result_t ftest_send_receive_normal(void) {
 	unsigned long id = 0;
 	char output[10] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8'};
 	char input[10] = {'\0'};
+	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -694,10 +837,12 @@ test_result_t ftest_send_receive_normal(void) {
 	return SUCCESS;
 }
 
+//TODO: Надо протестировать функции работы буфера
 test_result_t ftest_send_receive_doubled(void) {
 	unsigned long id = 0;
 	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
 	char input[20] = {'\0'};
+	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -726,6 +871,7 @@ test_result_t ftest_send_recevie_tripled_without_subscribe(void) {
 	unsigned long id = 0;
 	char output[30] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'};
 	char input[30] = {'\0'};
+	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -755,6 +901,7 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 	unsigned long id = 0;
 	char output[30] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'};
 	char input[30] = {'\0'};
+	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -781,6 +928,9 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 }
 
 static int __init pubsub_init(void) {
+	init_nodes();
+
+	/*
 	test_create_node_struct();
 	test_create_publisher_struct();
 	test_create_subscriber_struct();
@@ -806,15 +956,20 @@ static int __init pubsub_init(void) {
 	test_find_msg_num_position_after_pop();
 	test_find_next_position_empty();
 	test_find_next_position();
-	stest_create_find_node();
+	test_write_buffer_simple();
+	test_get_buffer_address_end_begin_less_bigger();
+	test_get_buffer_address_end_begin_bigger_less();
+	test_get_buffer_address_begin_end_less_bigger();
+	test_get_buffer_address_begin_end_bigger_less();
+	stest_create_acquire_node();
 	stest_create_find_publish_node();
-
+	stest_buffer();
+	*/
 	ftest_create_delete_node();
 	ftest_delete_empty();
 	ftest_publish_doubled();
 	ftest_publish_unpublish();
 	ftest_publish_unpublished_deleted();
-	/*
 	ftest_unpublish_after_delete();
 	ftest_subscribe_unsubscribe();
 	ftest_subscribe_unsubscribe_deleted();
@@ -825,6 +980,7 @@ static int __init pubsub_init(void) {
 	ftest_send_receive_doubled();
 	ftest_send_recevie_tripled_without_subscribe();
 	ftest_send_receive_tripled_with_subscribe();
+	/*
 	*/
 	return 0;
 }
