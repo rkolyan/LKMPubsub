@@ -1,26 +1,17 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/vmalloc.h>
-#include <linux/uaccess.h>
-#include <linux/sched/mm.h>
-#include <linux/hashtable.h>
+#include <linux/string.h>
 
 MODULE_AUTHOR("Golovnev Nikolay");
-MODULE_DESCRIPTION("PubSub");
+MODULE_DESCRIPTION("PubSubExpeirmietn");
 MODULE_LICENSE("GPL");
 
-struct some_struct {
-	int num;
-	struct hlist_node hlist;
-};
-
 static int __init pubsub_init(void) {
-	DEFINE_HASHTABLE(some, 3);
-	struct some_struct *ps = vmalloc(sizeof(struct some_struct));
-	ps->num = 3;
-	hash_add_rcu(some, &(ps->hlist), ps->num);
-	synchronize_rcu();
+	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
+	char input[20] = {'\0'};
+	void *addr = memcpy(input, output, 20);
+	trace_printk("output = \"%20s\"\tinput = \"%20s\"\t addr = %p, input = %p\n", output, input, addr, input);
 	return 0;
 }
 

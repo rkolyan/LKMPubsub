@@ -90,7 +90,7 @@ int write_to_buffer(struct ps_buffer *buf, void *addr, void *user_info) {
 #ifndef PS_TEST
 	if (copy_from_user(addr, user_info, buf->blk_size)) {
 #else
-	if (!memcpy(addr, user_info, buf->blk_size)){
+	if (memcpy(addr, user_info, buf->blk_size) != addr){
 #endif
 		return -EFAULT;
 	}
@@ -102,51 +102,51 @@ void *get_buffer_address(const struct ps_buffer *buf, int msg_num) {
 	void *addr = NULL;
 	if (buf->begin < buf->end) {
 		if (buf->begin_num >= 0 && buf->end_num >= 0) {
-			addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+			addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 		} else if (buf->begin_num >= 0 && buf->end_num < 0) {//TODO: Че за херня(тут CLion ругается)?
 			if (msg_num < 0)
-				addr = buf->end - (buf->end_num - msg_num) * buf->blk_size;
+				addr = &((char *)buf->end)[- (buf->end_num - msg_num) * buf->blk_size];
 			else
-				addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+				addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 		} else {
 			if (msg_num < 0)
-				addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+				addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 			else
-				addr = buf->end - (buf->end_num - msg_num) * buf->blk_size;
+				addr = &((char *)buf->end)[-(buf->end_num - msg_num) * buf->blk_size];
 		}
 	} else {
 		if (buf->begin_num >= 0 && buf->end_num >= 0) {
 			if (msg_num < buf->base_begin_num)
-				addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+				addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 			else
-				addr = buf->end - (buf->end_num - msg_num) * buf->blk_size;
+				addr = &((char *)buf->end)[-(buf->end_num - msg_num) * buf->blk_size];
 		} else if (buf->begin_num >= 0 && buf->end_num < 0) {//TODO: И тут тоже
 			if(buf->base_begin_num < 0) {
 				if (msg_num < 0) { 
 					if (buf->base_begin_num <= msg_num) {
-						addr = buf->base_begin + (msg_num - buf->base_begin_num) * buf->blk_size;
+						addr = &((char *)buf->base_begin)[(msg_num - buf->base_begin_num) * buf->blk_size];
 					} else {
-						addr = buf->base_end - (buf->base_begin_num - msg_num - 1) * buf->blk_size;//buf->base_end осторожней с ней
+						addr = &((char *)buf->base_end)[-(buf->base_begin_num - msg_num - 1) * buf->blk_size];//buf->base_end осторожней с ней
 					}
 				} else {
-					addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+					addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 				}
 			} else {
 				if (msg_num < 0) {
-					addr = buf->end - (buf->end_num - msg_num) * buf->blk_size;
+					addr = &((char *)buf->end)[-(buf->end_num - msg_num) * buf->blk_size];
 				} else {
 					if (buf->base_begin_num <= msg_num) {
-						addr = buf->base_begin + (msg_num - buf->base_begin_num) * buf->blk_size;
+						addr = &((char *)buf->base_begin)[(msg_num - buf->base_begin_num) * buf->blk_size];
 					} else {
-						addr = buf->base_end - (buf->base_begin_num - msg_num - 1) * buf->blk_size;//buf->base_end осторожней с ней
+						addr = &((char *)buf->base_end)[-(buf->base_begin_num - msg_num - 1) * buf->blk_size];//buf->base_end осторожней с ней
 					}
 				}
 			}
 		} else {
 			if (msg_num >= buf->base_begin_num)
-				addr = buf->base_begin + (msg_num - buf->base_begin_num) * buf->blk_size;
+				addr = &((char *)buf->base_begin)[(msg_num - buf->base_begin_num) * buf->blk_size];
 			else
-				addr = buf->begin + (msg_num - buf->begin_num) * buf->blk_size;
+				addr = &((char *)buf->begin)[(msg_num - buf->begin_num) * buf->blk_size];
 		}
 	}
 	return addr;

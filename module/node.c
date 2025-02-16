@@ -293,7 +293,7 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 	if (is_buffer_access_reading(&(node->buf), msg_num)) {
 		//2)Получаем по номеру адрес буфера
 		addr = get_buffer_address(&(node->buf), msg_num);
-		trace_printk("after get_buffer_address addr = %p, msg_num = %d\n", addr, msg_num);
+		trace_printk("after get_buffer_address addr = %p, tmp_address = %p, msg_num = %d\n", addr, ((char *)node->buf.base_begin) + msg_num * node->buf.blk_size, msg_num);
 		//3)Читаем
 		err = read_from_buffer(&(node->buf), addr, info);
 		trace_printk("after read_from_buffer err = %d\n", err);
@@ -374,15 +374,18 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 	if (!is_buffer_full(&(node->buf))) {
 		//1)Получить свободный номер (это end_num)
 		msg_num = get_buffer_end_num(&(node->buf));
+		trace_printk("after get_buffer_end_num msg_num = %d\n", msg_num);
 		set_prohibition_num(proh, msg_num);
 		//2)Получить адрес свободного блока (это end)
 		addr = get_buffer_address(&(node->buf), msg_num);
+		trace_printk("after get_buffer_address addr = %p, tmp_addr = %p\n", addr, node->buf.base_begin + msg_num * node->buf.blk_size);
 		prohibit_buffer(&(node->buf), proh);
 
-		create_last_message(&(node->buf));
+		create_last_message(&(node->buf));//TODO: Название тупое
 		spin_unlock(&(node->pos_lock));
 
 		err = write_to_buffer(&(node->buf), addr, info);
+		trace_printk("after write_to_buffer str = \"%20s\", addr = \"%10s\", info = \"%10s\"\n", (char *)&node->buf.base_begin, (char *)addr, (char *)info);
 
 		spin_lock(&(node->pos_lock));
 		unprohibit_buffer(&(node->buf), proh);

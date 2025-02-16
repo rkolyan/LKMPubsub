@@ -847,10 +847,10 @@ test_result_t ftest_send_receive_doubled(void) {
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
 	int err3 = ps_node_send(id, output);
-	int err4 = ps_node_send(id, output + 10);
+	int err4 = ps_node_send(id, &output[10]);
 	int err5 = ps_node_subscribe(id);
 	int err6 = ps_node_receive(id, input);
-	int err7 = ps_node_receive(id, input + 10);
+	int err7 = ps_node_receive(id, &input[10]);
 	int err8 = ps_node_delete(id);
 
 	char flag = 0;
@@ -964,7 +964,6 @@ static int __init pubsub_init(void) {
 	stest_create_acquire_node();
 	stest_create_find_publish_node();
 	stest_buffer();
-	*/
 	ftest_create_delete_node();
 	ftest_delete_empty();
 	ftest_publish_doubled();
@@ -977,10 +976,11 @@ static int __init pubsub_init(void) {
 	ftest_send_with_publish();
 	ftest_send_receive_without_subscribe();
 	ftest_send_receive_normal();
+	*/
 	ftest_send_receive_doubled();
+	/*
 	ftest_send_recevie_tripled_without_subscribe();
 	ftest_send_receive_tripled_with_subscribe();
-	/*
 	*/
 	return 0;
 }
