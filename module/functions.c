@@ -52,20 +52,12 @@ long ps_node_subscribe(unsigned long node_id) {
 	int err = 0;
 	struct ps_node *node = NULL;
 	struct ps_subscriber *sub = NULL;
-	struct ps_position *pos = NULL;
 
 	trace_printk("BEGIN node_id = %lu\n", node_id);
 	err = create_subscriber_struct(sub_id, &sub);
 	trace_printk("after create_subscriber_struct sub  = %p, err = %d\n", sub, err);
 	if (err)
 		return err;
-	err = create_position_struct(&pos);
-	trace_printk("after create_position_struct pos  = %p, err = %d\n", pos, err);
-	if (err) {
-		delete_subscriber_struct(sub);
-		trace_printk("after delete_subscriber_struct\n");
-		return err;
-	}
 
 	err = acquire_node(node_id, &node);
 	trace_printk("after acquire_node node = %p, node_id = %ld\n", node, node_id);
@@ -79,11 +71,9 @@ long ps_node_subscribe(unsigned long node_id) {
 	trace_printk("after find_subscriber_in_node sub  = %p, err = %d\n", sub, err);
 	if (err == -ENOENT) {
 		err = 0;
-		add_position_in_node(node, pos);
 		add_subscriber_in_node(node, sub);
 		trace_puts("after adding to collections\n");
 	} else {
-		delete_position_struct(pos);
 		delete_subscriber_struct(sub);
 		trace_puts("after delete structures\n");
 	}
@@ -99,7 +89,6 @@ long ps_node_unsubscribe(unsigned long node_id) {
 	int err = 0;
 	struct ps_node *node = NULL;
 	struct ps_subscriber *sub = NULL;
-	struct ps_position *pos = NULL;
 	trace_puts("BEGIN\n");
 
 	err = acquire_node(node_id, &node);
@@ -113,9 +102,7 @@ long ps_node_unsubscribe(unsigned long node_id) {
 	trace_printk("after find_subscriber_in_node sub = %p, err = %d\n", sub, err);
 	if (!err) {
 		remove_subscriber_in_node(node, sub);
-		remove_position_in_node(node, &pos);
 		trace_puts("after remove collections\n");
-		delete_position_struct(pos);
 		delete_subscriber_struct(sub);
 		trace_puts("after delete structures\n");
 	}
