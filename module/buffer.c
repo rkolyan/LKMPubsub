@@ -17,18 +17,16 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 	buf->base_begin = vzalloc(final_size);
 	if (!buf->base_begin)
 		return -ENOMEM;
-	struct ps_position_array *ps_pos_arr = vzalloc(sizeof(struct ps_position_array));
-	if (!ps_pos_arr) {
+	INIT_LIST_HEAD(&buf->prohibited);
+	INIT_LIST_HEAD(&buf->positions_free);
+	struct ps_position *pos = create_position_struct();
+	if (!pos) {
 		vfree(buf->base_begin);
 		return -ENOMEM;
 	}
-	INIT_LIST_HEAD(&buf->prohibited);
-	INIT_LIST_HEAD(&buf->positions_free);
-	INIT_LIST_HEAD(&buf->positions_all);
+	list_add(&pos->list, &buf->positions_free);
 	INIT_LIST_HEAD(&buf->positions_used);//Он пока пустой
-	atomic_set(&buf->pos_count, 1);
-	atomic_set(&buf->cur_count, 0);
-	list_add(&ps_pos_arr->list, &buf->positions_all);
+	buf->stop_pos = NULL;
 	buf->base_end = &((char *)buf->base_begin)[final_size];
 	buf->begin = buf->base_begin;
 	buf->end = buf->base_begin;
@@ -41,37 +39,32 @@ int init_buffer(struct ps_buffer *buf, size_t buf_size, size_t blk_size) {
 int deinit_buffer(struct ps_buffer *buf) {
 	if (!buf)
 		return -EINVAL;
-	struct ps_position_array *ps_pos_arr = NULL, *tmp = NULL;
-	list_for_each_safe(ps_pos_arr, tmp, &node->buf->positions_all, list) {
-		vfree(ps_pos_arr);
+	struct list_head *cur = NULL, *tmp = NULL;
+	list_for_each_safe(cur, tmp, &buf->positions_used) {
+		vfree(list_entry(cur, struct ps_position, list));
+	}
+	list_for_each_safe(cur, tmp, &buf->positions_free) {
+		vfree(list_entry(cur, struct ps_position, list));
+	}
+	list_for_each_safe(cur, tmp, &buf->prohibited) {
+		vfree(list_entry(cur, struct ps_prohibition, list));
 	}
 	vfree(buf->base_begin);
 	return 0;
 }
 
-int is_buffer_access_writing(struct ps_buffer *buf) {
-	if (!buf)
-		return 0;
-	if (buf->end != buf->begin && !buf->flag_full)
-		return 1;
-	return 0;
-}
-
-int is_position_out_of_bound(struct ps_buffer *buf, struct ps_position *pos) {
+int is_position_correct(struct ps_buffer *buf, struct ps_position *pos) {
 	if (pos->addr < buf->base_begin || pos->addr >= buf->base_end)
 		return 2;
-	if (buf->end_read > buf->begin) {
-		if (pos->addr >= buf->end_read || pos->addr < buf->begin) {
+	if (buf->begin < buf->end) {
+		if (pos->addr >= buf->begin && pos->addr < buf->end_read)
 			return 1;
-		} else {
-			return 0;
-		}
-	} else if (buf->end_read < buf->begin) {
-		if (pos->addr < buf->begin && pos->addr >= buf->end_read) {
+	} else if (buf->begin > buf->end_read) {
+		if (pos->addr < buf->end_read || pos->addr >= buf->begin)
 			return 1;
-		} else {
-			return 0;
-		}
+	} else {
+		if (pos->addr == buf->begin && pos != buf->stop_pos)
+			return 1;
 	}
 	return 0;
 }
@@ -80,13 +73,43 @@ int is_position_not_used(struct ps_buffer *buf, struct ps_position *pos) {
 	return atomic_read(&pos->cnt);
 }
 
+int positions_used_empty(struct ps_buffer *buf) {
+	return list_empty(&buf->positions_used);
+}
+
 inline void prohibition_init(struct ps_prohibition *proh) {
 	INIT_LIST_HEAD(&proh->list);
 }
 
-void prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh) {
+int try_prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh) {
+	bool flag = false;
+	if (buf->begin != buf->end) {
+		flag = true;
+	} else {
+		struct ps_prohibition *first_proh = list_first_entry_or_null(&(buf->prohibited), struct ps_prohibition, list);
+		if (first_proh && first_proh->addr == buf->end) {
+			flag = false;
+		} else {
+			struct ps_position *pos = find_first_position(buf);
+			//Если позиции нет, писать можно
+			//Если позиция есть, но она stop_pos, писать можно
+			//Если позиция есть, но её адрес не совпадает с end, то писать можно
+			//Иначе нельзя
+			if (!pos || pos == buf->stop_pos || pos->addr != buf->end) {
+				flag = true;
+			} else {
+				flag = false;
+			}
+		}
+	}
+	if (!flag)
+		return 0;
 	proh->addr = buf->end;
+	buf->end += buf->blk_size;
+	if (buf->end == buf->base_end)
+		buf->end = buf->base_begin;
 	list_add_tail_rcu(&(proh->list), &(buf->prohibited));
+	return 1;
 }
 
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
@@ -97,28 +120,25 @@ void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
 		} else {
 			buf->end_read = buf->base_begin;
 		}
+		buf->stop_pos = NULL;
 	}
 	list_del_rcu(&proh->list);
 }
 
 #ifndef PS_TEST
-int write_to_buffer_end(struct ps_buffer *buf, void __user *user_info) {
+int write_to_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh, void __user *user_info) {
 #else
-int write_to_buffer_end(struct ps_buffer *buf, void *user_info) {
+int write_to_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh, void *user_info) {
 #endif
 	if (!buf || !user_info)
 		return -EINVAL;
 
 #ifndef PS_TEST
-	if (copy_from_user(buf->end, user_info, buf->blk_size)) {
+	if (copy_from_user(proh->addr, user_info, buf->blk_size)) {
 #else
-	if (memcpy(buf->end, user_info, buf->blk_size) != buf->end){
+	if (memcpy(proh->addr, user_info, buf->blk_size) != buf->end){
 #endif
 		return -EFAULT;
-	}
-	buf->end += buf->blk_size;
-	if (buf->end == buf->base_end) {
-		buf->end = buf->base_begin;
 	}
 	return 0;
 }
@@ -140,18 +160,12 @@ int read_from_buffer_at_position(struct ps_buffer *buf, struct ps_position *pos,
 	return 0;
 }
 
-int up_position(struct ps_position *pos) {
-	if (!pos)
-		return -EINVAL;
-	pos->cnt--;
-	return 0;
+void up_position(struct ps_position *pos) {
+	atomic_dec(&pos->cnt);
 }
 
-int down_position(struct ps_position *pos) {
-	if (!pos)
-		return -EINVAL;
-	pos->cnt++;
-	return 0;
+void down_position(struct ps_position *pos) {
+	atomic_inc(&pos->cnt);
 }
 
 void push_free_position(struct ps_buffer *buf, struct ps_position *pos) {
@@ -163,10 +177,24 @@ void pop_free_position(struct ps_buffer *buf, struct ps_position *pos) {
 }
 
 void push_used_position_after(struct ps_buffer *buf, struct ps_position *new_pos, struct ps_position *pos) {
+	void *addr = pos->addr + buf->blk_size;
+	if (addr == buf->base_end)
+		addr = buf->base_begin;
+	if (addr == buf->end_read)
+		buf->stop_pos = new_pos;
 	list_add_rcu(&new_pos->list, &pos->list);
 }
 
+void push_used_position_begin(struct ps_buffer *buf, struct ps_position *pos) {
+	pos->addr = buf->begin;
+	if (pos->addr == buf->end_read)
+		buf->stop_pos = pos;
+	list_add_rcu(&pos->list, &buf->positions_used);
+}
+
 void pop_used_position(struct ps_buffer *buf, struct ps_position *pos) {
+	if (pos == buf->stop_pos)
+		buf->stop_pos = NULL;
 	list_del_rcu(&pos->list);
 }
 
@@ -190,17 +218,21 @@ struct ps_position *find_next_position(struct ps_buffer *buf, struct ps_position
 	return NULL;
 }
 
+//TODO: Вся защита на запись должны быть в node.c
 struct ps_position *find_first_position(struct ps_buffer *buf) {
 	return list_first_entry_or_null(&buf->positions_used, struct ps_position, list);
 }
 
-int buffer_positions_inc(struct ps_buffer *buf) {
-	//TODO: Короче, ставим спинлок
-	//Увеличиваем pos_count
-	//Если он равен PS_POSITIONS_DEFAULT_COUNT
-	//	
+struct ps_position *create_position_struct(void) {
+	struct ps_position *pos = vzalloc(sizeof(struct ps_position));
+	if (pos) {
+		atomic_set(&pos->cnt, 0);
+		pos->addr = NULL;
+		INIT_LIST_HEAD(&pos->list);
+	}
+	return pos;
 }
 
-int buffer_positions_dec(struct ps_buffer *buf) {
-	struct ps_positions_array *pos
+void delete_position_struct(struct ps_position *pos) {
+	vfree(pos);
 }

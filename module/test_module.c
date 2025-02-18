@@ -61,12 +61,10 @@ test_result_t test_create_subscriber_struct(void) {
 }
 
 test_result_t test_create_position_struct(void) {
-	struct ps_position *pos = NULL;
+	struct ps_position *pos = create_position_struct(&pos);
 
-	int err = create_position_struct(&pos);
-	
-	if (err || pos == NULL) {
-		trace_printk("err == %d, pos == %p\n", err, pos);
+	if (pos == NULL) {
+		trace_printk("pos == %p\n", pos);
 		return EXPECT;
 	}
 	delete_position_struct(pos);
@@ -78,9 +76,9 @@ test_result_t test_init_buffer_struct(void) {
 
 	int err = init_buffer(&buf, 20, 10);
 
-	if (err || buf.base_begin != buf.begin || buf.begin != buf.end || buf.blk_size != 10 || buf.buf_size != 20 || buf.base_end - buf.base_begin != (buf.buf_size - 1) * (buf.blk_size) || buf.begin_num != 0 || buf.end_num != 0 || buf.base_begin_num != 0) {
-		trace_printk("err == %d, begin == %p, end == %p, base_begin == %p, base_end == %p, begin_num == %d, end_num == %d, base_begin_num == %d, buf_size == %lu, blk_size == %lu\n", err, buf.begin, buf.end, buf.base_begin, buf.base_end, buf.begin_num, buf.end_num, buf.base_begin_num, buf.buf_size, buf.blk_size);
-		trace_printk("base_end - base_begin = %ld, buf_size * blk_size = %lu\n", buf.base_end - buf.base_begin, (buf.buf_size - 1) * buf.blk_size);
+	if (err || buf.base_begin != buf.begin || buf.begin != buf.end || buf.blk_size != 10 || buf.buf_size != 20 || buf.base_end - buf.base_begin != buf.buf_size * buf.blk_size) {
+		trace_printk("err == %d, begin == %p, end == %p, base_begin == %p, base_end == %p, buf_size == %lu, blk_size == %lu\n", err, buf.begin, buf.end, buf.base_begin, buf.base_end, buf.buf_size, buf.blk_size);
+		trace_printk("base_end - base_begin = %ld, buf_size * blk_size = %lu\n", buf.base_end - buf.base_begin, buf.buf_size * buf.blk_size);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -269,46 +267,48 @@ test_result_t test_find_subscriber_affect(void) {
 }
 
 //TODO: 2)Протестируем функции поиска позиции в коллекции
+//TODO: Нужно из init_buffer удалить push_free_position и вставить в node.c
 test_result_t test_find_free_position_empty(void) {
 	struct ps_position *pos1 = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = 0;
+	struct ps_buffer buf;
+	init_buffer(&buf, 3, 10);
 	
-	err1 = find_free_position(&desc, &pos1);
+	pos1 = find_free_position(&buf);
 
-	if (!err1 || pos1) {
-		trace_printk("err1 == %d, pos1 == %p\n", err1, pos1);
+	if (pos1) {
+		trace_printk("pos1 == %p\n", pos1);
 		return EXPECT;
 	}
+	deinit_buffer(&buf);
 	return SUCCESS;
 }
 
 test_result_t test_find_free_position(void) {
 	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1);
-	push_free_position(&desc, pos1);
+	struct ps_buffer buf;
+	init_buffer(&buf, 3, 4);
+	pos = create_position_struct();
+	push_free_position(&buf, pos);
 	
-	err1 = find_free_position(&desc, &pos);
+	pos1 = find_free_position(&buf);
 
-	if (err1 || !pos || pos != pos1) {
-		trace_printk("err1 == %d, pos1 == %p, pos == %p\n", err1, pos1, pos);
+	if (pos != pos1) {
+		trace_printk("pos1 == %p, pos == %p\n", pos1, pos);
 		return EXPECT;
 	}
+	deinit_buffer(&buf);
 	return SUCCESS;
 }
 
 test_result_t test_find_free_position_after_pop(void) {
 	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1);
-	push_free_position(&desc, pos1);
-	pop_free_position(&desc, pos1);
+	struct ps_buffer buf;
+	init_buffer(&buf, 3, 4);
+	pos = create_position_struct();
+	push_free_position(&buf, pos);
+	pop_free_position(&buf, pos);
 
-	err1 = find_free_position(&desc, &pos);
+	pos1 = find_free_position(&buf);
 
 	if (!err1 || pos) {
 		trace_printk("err1 == %d, pos == %p\n", err1, pos);

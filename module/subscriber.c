@@ -75,20 +75,20 @@ int connect_subscriber_position(struct ps_subscriber *sub, struct ps_position *p
     if (!sub || !pos)
         return -EINVAL;
     //TODO: Защита позиций!
-    trace_printk("BEFORE pos->cnt = %u\n", pos->cnt);
+    trace_printk("BEFORE pos->cnt = %u\n", atomic_read(&pos->cnt));
     down_position(pos);
-    trace_printk("END pos->cnt = %u\n", pos->cnt);
+    trace_printk("END pos->cnt = %u\n", atomic_read(&pos->cnt));
     sub->pos = pos;
     return 0;
 }
 
-int disconnect_subscriber_position(struct ps_subscriber *sub) {
+int disconnect_subscriber_position(struct ps_subscriber *sub, struct ps_position *pos) {
     trace_printk("BEGIN sub = %p, pos = %p\n", sub, sub->pos);
     if (!sub)
         return -EINVAL;
-    trace_printk("BEFORE pos->cnt = %u\n", sub->pos->cnt);
+    trace_printk("BEFORE pos->cnt = %u\n", atomic_read(&sub->pos->cnt));
     up_position(sub->pos);
-    trace_printk("END pos->cnt = %u\n", sub->pos->cnt);
+    trace_printk("END pos->cnt = %u\n", atomic_read(&sub->pos->cnt));
     sub->pos = NULL;
     return 0;
 }

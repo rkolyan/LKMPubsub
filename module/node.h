@@ -9,7 +9,6 @@
 struct ps_node {
 	unsigned long id;
 	struct ps_buffer buf;
-	struct ps_positions_desc desc;
 	spinlock_t subs_lock;
 	spinlock_t pubs_lock;
 	spinlock_t pos_lock;
@@ -45,7 +44,7 @@ int remove_node(struct ps_node *node);
 
 int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub);
 int find_subscriber_in_node(struct ps_node *node, pid_t pid, struct ps_subscriber **result);
-int remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub);
+void remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub);
 
 int add_position_in_node(struct ps_node *node, struct ps_position *pos);
 int remove_position_in_node(struct ps_node *node, struct ps_position **result);
