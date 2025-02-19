@@ -53,23 +53,26 @@ int deinit_buffer(struct ps_buffer *buf) {
 	return 0;
 }
 
-int is_position_correct(struct ps_buffer *buf, struct ps_position *pos) {
+int is_position_incorrect(struct ps_buffer *buf, struct ps_position *pos) {
+	//TODO: Удали !pos
+	if (!pos)
+		return 3;
 	if (pos->addr < buf->base_begin || pos->addr >= buf->base_end)
 		return 2;
 	if (buf->begin < buf->end) {
 		if (pos->addr >= buf->begin && pos->addr < buf->end_read)
-			return 1;
+			return 0;
 	} else if (buf->begin > buf->end_read) {
 		if (pos->addr < buf->end_read || pos->addr >= buf->begin)
-			return 1;
+			return 0;
 	} else {
 		if (pos->addr == buf->begin && pos != buf->stop_pos)
-			return 1;
+			return 0;
 	}
-	return 0;
+	return 1;
 }
 
-int is_position_not_used(struct ps_buffer *buf, struct ps_position *pos) {
+int is_position_used(struct ps_buffer *buf, struct ps_position *pos) {
 	return atomic_read(&pos->cnt);
 }
 
@@ -136,7 +139,7 @@ int write_to_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh, void
 #ifndef PS_TEST
 	if (copy_from_user(proh->addr, user_info, buf->blk_size)) {
 #else
-	if (memcpy(proh->addr, user_info, buf->blk_size) != buf->end){
+	if (memcpy(proh->addr, user_info, buf->blk_size) != proh->addr){
 #endif
 		return -EFAULT;
 	}
@@ -153,7 +156,7 @@ int read_from_buffer_at_position(struct ps_buffer *buf, struct ps_position *pos,
 #ifndef PS_TEST
 	if (copy_to_user(user_info, pos->addr, buf->blk_size)) {
 #else
-	if (!memcpy(user_info, pos->addr, buf->blk_size)) {
+	if (memcpy(user_info, pos->addr, buf->blk_size) != user_info) {
 #endif
 		return -EFAULT;
 	}
@@ -182,12 +185,13 @@ void push_used_position_after(struct ps_buffer *buf, struct ps_position *new_pos
 		addr = buf->base_begin;
 	if (addr == buf->end_read)
 		buf->stop_pos = new_pos;
+	pos->addr = addr;
 	list_add_rcu(&new_pos->list, &pos->list);
 }
 
 void push_used_position_begin(struct ps_buffer *buf, struct ps_position *pos) {
 	pos->addr = buf->begin;
-	if (pos->addr == buf->end_read)
+	if (list_empty(&buf->positions_used) && pos->addr == buf->end_read)
 		buf->stop_pos = pos;
 	list_add_rcu(&pos->list, &buf->positions_used);
 }

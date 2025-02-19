@@ -70,10 +70,10 @@ long ps_node_subscribe(unsigned long node_id) {
 	err = find_subscriber_in_node(node, sub_id, &sub);
 	trace_printk("after find_subscriber_in_node sub  = %p, err = %d\n", sub, err);
 	if (err == -ENOENT) {
-		err = 0;
-		add_subscriber_in_node(node, sub);
-		trace_puts("after adding to collections\n");
-	} else {
+		err = add_subscriber_in_node(node, sub);
+		trace_printk("after adding to collections err = %d, sub = %p, sub->pos = %p\n", err, sub, sub->pos);
+	}
+       	if (err) {
 		delete_subscriber_struct(sub);
 		trace_puts("after delete structures\n");
 	}
@@ -190,7 +190,7 @@ long ps_node_send(unsigned long node_id, void *info) {
 	trace_puts("BEGIN\n");
 
 	err = acquire_node(node_id, &node);
-	trace_printk("after find_node node = %p, err = %d\n", node, err);
+	trace_printk("after acquire_node node = %p, err = %d\n", node, err);
 
 	if (err) {
 		return err;

@@ -68,12 +68,10 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	struct ps_node *node = vzalloc(sizeof(struct ps_node));
 	if (!node)
 		return -ENOMEM;
-	trace_puts("vzalloc successed!\n");
 	INIT_HLIST_NODE(&(node->hlist));
 	node->id = (unsigned long) (&(node->hlist));
 	int err = init_buffer(&(node->buf), buf_size, block_size);
 	if (err) {
-		//pr_err(__func__ ":Нельзя выделить памяти для вспомогательной информации ps_buffer!");
 		vfree(node);
 		return err;
 	}
@@ -88,7 +86,6 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	atomic_set(&(node->use_count), 0);
 	atomic_inc(&(nodes_count));
 	*result = node;
-	trace_puts("vzalloc ended!\n");
 	return 0;
 }
 
@@ -198,22 +195,33 @@ int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
 	struct ps_position *pos = create_position_struct();
 	if (!pos)
 		return -ENOMEM;
+	int err = 0;
 	spin_lock(&node->pos_lock);
 	push_free_position(&node->buf, pos);
 	if (!positions_used_empty(&node->buf)) {
 		pos = find_first_position(&node->buf);
+		if (!pos) {
+			err = -EBADF;
+		}
 	} else {
 		pos = find_free_position(&node->buf);
-		pop_free_position(&node->buf, pos);
-		push_used_position_begin(&node->buf, pos);
+		if (pos) {
+			pop_free_position(&node->buf, pos);
+			push_used_position_begin(&node->buf, pos);
+		} else {
+			err = -ENOENT;
+		}
 	}
-	connect_subscriber_position(sub, pos);
+	if (pos) {
+		connect_subscriber_position(sub, pos);
+	}
 	spin_unlock(&node->pos_lock);
-	
-	spin_lock(&(node->subs_lock));
-	add_subscriber(&(node->subs_coll), sub);
-	spin_unlock(&(node->subs_lock));
-	return 0;
+	if (!err) {
+		spin_lock(&(node->subs_lock));
+		add_subscriber(&(node->subs_coll), sub);
+		spin_unlock(&(node->subs_lock));
+	}
+	return err;
 }
 
 void remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
@@ -224,7 +232,7 @@ void remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) 
 	spin_lock(&(node->pos_lock));
 	pos = get_subscriber_position(sub);
 	disconnect_subscriber_position(sub, pos);
-	if (is_position_not_used(&node->buf, pos)) {
+	if (!is_position_used(&node->buf, pos)) {
 		pop_used_position(&node->buf, pos);
 		push_free_position(&node->buf, pos);
 	}
@@ -252,6 +260,8 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 		return -EINVAL;
 	int err = 0;
 	struct ps_prohibition *proh = get_publisher_prohibition(pub);
+	trace_printk("pub == %p, proh == %p\n", pub, proh);
+	//TODO: НУЖНО ОБНОВИТЬ begin
 	spin_lock(&node->pos_lock);
 	if (try_prohibit_buffer_end(&node->buf, proh)) {
 		spin_unlock(&node->pos_lock);
@@ -277,13 +287,24 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 		return -EINVAL;
 	int err = 0;
 	struct ps_position *pos = get_subscriber_position(sub), *new_pos = NULL;
-	if (is_position_correct(&node->buf, pos)) {
+	//trace_printk("after get_subscriber_position pos = %p, sub = %p\n", pos, sub);
+	int flag = is_position_incorrect(&node->buf, pos);
+	trace_printk("after is_position_incorrect flag = %d, pos = %p\n", flag, pos);
+	if (pos)
+		trace_printk("pos->addr = %p, diff_begin = %ld, diff_end_read = %ld\n", pos->addr, node->buf.begin - pos->addr, node->buf.end - pos->addr);
+	else
+		return -EBADF;
+	if (!flag) {
+		trace_puts("after is_position_correct\n");
 		err = read_from_buffer_at_position(&node->buf, pos, info);
+		trace_printk("after read_from_buffer_at_position err = %d\n", err);
 		spin_lock(&node->pos_lock);
 		if (!err) {
 			new_pos = find_next_position(&node->buf, pos);
+			trace_printk("after find_next_position new_pos = %p\n", new_pos);
 			if (!new_pos) {
 				new_pos = find_free_position(&node->buf);
+				trace_printk("after find_free_position new_pos = %p\n", new_pos);
 				if (new_pos) {
 					pop_free_position(&node->buf, new_pos);
 					push_used_position_after(&node->buf, new_pos, pos);
@@ -295,12 +316,12 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 		if (!err) {
 			connect_subscriber_position(sub, new_pos);
 			disconnect_subscriber_position(sub, pos);
-			if (is_position_not_used(&node->buf, pos)) {
+			if (!is_position_used(&node->buf, pos)) {
 				pop_used_position(&node->buf, pos);
 				push_free_position(&node->buf, pos);
 			}
 		}
-		spin_lock(&node->pos_lock);
+		spin_unlock(&node->pos_lock);
 	} else {
 		err = -EAGAIN;//Пока новые сообщения не приходили
 	}

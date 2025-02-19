@@ -6,7 +6,6 @@
 #include "node.h"
 #include "publisher.h"
 #include "subscriber.h"
-#include "position.h"
 #include "buffer.h"
 #include "functions.h"
 
@@ -61,7 +60,7 @@ test_result_t test_create_subscriber_struct(void) {
 }
 
 test_result_t test_create_position_struct(void) {
-	struct ps_position *pos = create_position_struct(&pos);
+	struct ps_position *pos = create_position_struct();
 
 	if (pos == NULL) {
 		trace_printk("pos == %p\n", pos);
@@ -268,288 +267,9 @@ test_result_t test_find_subscriber_affect(void) {
 
 //TODO: 2)Протестируем функции поиска позиции в коллекции
 //TODO: Нужно из init_buffer удалить push_free_position и вставить в node.c
-test_result_t test_find_free_position_empty(void) {
-	struct ps_position *pos1 = NULL;
-	struct ps_buffer buf;
-	init_buffer(&buf, 3, 10);
-	
-	pos1 = find_free_position(&buf);
-
-	if (pos1) {
-		trace_printk("pos1 == %p\n", pos1);
-		return EXPECT;
-	}
-	deinit_buffer(&buf);
-	return SUCCESS;
-}
-
-test_result_t test_find_free_position(void) {
-	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_buffer buf;
-	init_buffer(&buf, 3, 4);
-	pos = create_position_struct();
-	push_free_position(&buf, pos);
-	
-	pos1 = find_free_position(&buf);
-
-	if (pos != pos1) {
-		trace_printk("pos1 == %p, pos == %p\n", pos1, pos);
-		return EXPECT;
-	}
-	deinit_buffer(&buf);
-	return SUCCESS;
-}
-
-test_result_t test_find_free_position_after_pop(void) {
-	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_buffer buf;
-	init_buffer(&buf, 3, 4);
-	pos = create_position_struct();
-	push_free_position(&buf, pos);
-	pop_free_position(&buf, pos);
-
-	pos1 = find_free_position(&buf);
-
-	if (!err1 || pos) {
-		trace_printk("err1 == %d, pos == %p\n", err1, pos);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_free_position_empty_double(void) {
-	struct ps_position *pos1 = NULL, *pos2 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1);
-	create_position_struct(&pos2);
-	push_free_position(&desc, pos1);
-	push_free_position(&desc, pos2);
-	pop_free_position(&desc, pos1);
-	pop_free_position(&desc, pos2);
-
-	err1 = find_free_position(&desc, &pos);
-
-	if (!err1 || pos) {
-		trace_printk("err1 == %d, pos1 == %p, pos2 == %p, pos == %p\n", err1, pos1, pos2, pos);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_msg_num_position_empty(void) {
-	struct ps_position *pos1 = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-
-	int err1 = find_msg_num_position(&desc, 10, &pos1);
-
-	if (!err1 || pos1) {
-		trace_printk("err1 == %d, pos == %p\n", err1, pos1);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_msg_num_position(void) {
-	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1);
-	set_position_num(pos1, 10);
-	push_used_position_last(&desc, pos1);
-
-	err1 = find_msg_num_position(&desc, 10, &pos);
-
-	if (err1 || !pos || pos != pos1) {
-		trace_printk("err1 == %d, pos == %p, pos1 == %p\n", err1, pos, pos1);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_msg_num_position2(void) {
-	struct ps_position *pos1 = NULL, *pos2 = NULL, *pos1_2 = NULL, *pos2_2 = NULL, *pos3 = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1), err2 = create_position_struct(&pos2), err3 = 0;
-	set_position_num(pos1, 10);
-	set_position_num(pos2, 11);
-	push_used_position_last(&desc, pos1);
-	push_used_position_last(&desc, pos2);
-
-	err1 = find_msg_num_position(&desc, 10, &pos1_2);
-	err2 = find_msg_num_position(&desc, 11, &pos2_2);
-	err3 = find_msg_num_position(&desc, 12, &pos3);
-
-	if (err1 || err2 || !err3 || !pos1_2 || !pos2_2 || pos3 || pos1_2 != pos1 || pos2_2 != pos2) {
-		trace_printk("err1 == %d, pos1 == %p, pos1_1 == %p, err2 = %d, pos2 == %p, pos2_2 == %p, err3 == %d, pos3 == %p\n", err1, pos1, pos1_2, err2, pos2, pos2_2, err3, pos3);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_msg_num_position_after_pop(void) {
-	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	init_positions_desc(&desc);
-	int err1 = create_position_struct(&pos1);
-	set_position_num(pos1, 10);
-	push_used_position_last(&desc, pos1);
-	pop_used_position(&desc, pos1);
-
-	err1 = find_msg_num_position(&desc, 10, &pos);
-
-	if (!err1 || pos || pos1 == pos) {
-		trace_printk("err1 == %d, pos == %p, pos1 == %p\n", err1, pos, pos1);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_next_position_empty(void) {
-	struct ps_position *pos1 = NULL, *pos = NULL;
-	struct ps_positions_desc desc;
-	int err1 = create_position_struct(&pos1);
-	init_positions_desc(&desc);
-	set_position_num(pos1, 10);
-	push_used_position_last(&desc, pos1);
-
-	err1 = find_next_position(&desc, pos1, &pos);
-
-	if (!err1 || pos) {
-		trace_printk("err1 == %d, pos == %p, pos1 == %p\n", err1, pos, pos1);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_find_next_position(void) {
-	struct ps_position *pos1 = NULL, *pos2 = NULL, *pos1_2 = NULL, *pos2_2 = NULL;
-	struct ps_positions_desc desc;
-	int err1 = create_position_struct(&pos1), err2 = create_position_struct(&pos2);
-	init_positions_desc(&desc);
-	set_position_num(pos1, 10);
-	set_position_num(pos2, 12);
-	push_used_position_last(&desc, pos1);
-	push_used_position_last(&desc, pos2);
-
-	err1 = find_next_position(&desc, pos1, &pos1_2);
-	err2 = find_next_position(&desc, pos2, &pos2_2);
-
-	if (err1 || !err2 || pos2 != pos1_2 || pos2_2) {
-		trace_printk("err1 == %d, pos1 == %p, pos1_2 == %p,err2 == %d, pos2 == %p, pos2_2 == %p\n", err1, pos1, pos1_2, err2, pos2, pos2_2);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
 
 //TODO: 3)Протестировать буферные функции чтения и записи
 //TODO:
-test_result_t test_write_buffer_simple(void) {
-	char str[3] = {'a', 'b', 'c'};
-	struct ps_buffer buf;
-	
-	int err1 = init_buffer(&buf, 1, 3);
-	int msg_num = get_buffer_begin_num(&buf);
-	void *addr = get_buffer_address(&buf, msg_num);
-	int err2 = write_to_buffer(&buf, addr, str);
-
-	if (err1 || err2 || msg_num != 0 || !addr || addr != buf.base_begin || !(((char *)buf.base_begin)[0] == 'a' && ((char *)buf.base_begin)[1] == 'b' && ((char *)buf.base_begin)[2] == 'c')) {
-		trace_printk("err1 == %d, err2 == %d, addr = %p, base_begin = %p, msg_num = %d, base = %3s\n", err1, err2, addr, buf.base_begin, msg_num, (char *)buf.base_begin);
-		return EXPECT;
-	}
-
-	return SUCCESS;
-}
-
-#define BBBLOCK_SSSIZE 2
-
-test_result_t test_get_buffer_address_begin_end_less_bigger(void) {
-	struct ps_buffer buf;
-
-	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
-	deinit_buffer(&buf);
-	buf.base_begin_num = -1;
-	buf.begin_num = 2;
-	buf.begin = buf.base_begin + (buf.begin_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
-	buf.end_num = 4;
-	buf.end = buf.base_begin + (buf.end_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
-
-	void *addr1 = get_buffer_address(&buf, 4);
-	//void *addr2 = get_buffer_address(&buf, 6);TODO: По идее таких случаев быть не должно... 
-	void *addr3 = get_buffer_address(&buf, 1);
-
-	if (addr1 != ((char *)buf.base_end) || addr3 != ((char *)buf.base_begin) + 2 * BBBLOCK_SSSIZE) {
-		trace_printk("addr1 = %p, addr3 = %p, buf.base_end = %p, buf.base_begin + 2BLOCK - addr3 = %ld\n", addr1, addr3, buf.base_end, ((char *)buf.base_begin) + 2 * BBBLOCK_SSSIZE - (char*) addr3);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_get_buffer_address_begin_end_bigger_less(void) {
-	struct ps_buffer buf;
-
-	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
-	deinit_buffer(&buf);
-	buf.base_begin_num = 0x7FFFFFFF - 3;
-	buf.begin_num = 0x7FFFFFFF - 1;
-	buf.begin = buf.base_begin + (buf.begin_num - buf.base_begin_num) * BBBLOCK_SSSIZE;
-	buf.end_num = 0x7FFFFFFF + 2;
-	buf.end = buf.base_begin + 5 * BBBLOCK_SSSIZE;
-
-	void *addr1 = get_buffer_address(&buf, 0x7FFFFFFF + 1);
-	void *addr2 = get_buffer_address(&buf, 0x7FFFFFFF - 2);
-
-	if (addr1 != ((char *)buf.base_begin) + 4 * BBBLOCK_SSSIZE || addr2 != ((char *)buf.base_begin) + 1 * BBBLOCK_SSSIZE) {
-		trace_printk("addr1 = %p, addr2 = %p, diff1 = %ld, diff2 = %ld\n", addr1, addr2, ((char *)buf.begin) + 4 * BBBLOCK_SSSIZE - (char *)addr1, ((char *)buf.begin) + 1 * BBBLOCK_SSSIZE - (char *)addr2);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_get_buffer_address_end_begin_less_bigger(void) {
-	struct ps_buffer buf;
-
-	init_buffer(&buf, 6, BBBLOCK_SSSIZE);
-	deinit_buffer(&buf);
-	buf.base_begin_num = 8;
-	buf.begin_num = 6;
-	buf.begin = buf.base_end - BBBLOCK_SSSIZE;
-	buf.end_num = 9;
-	//T.O: Можно сделать типо buf->end_num - buf->begin_base_num % (base_end_num - base_begin_num);
-	buf.end = buf.base_begin + BBBLOCK_SSSIZE;
-
-	void *addr1 = get_buffer_address(&buf, 8);
-	void *addr2 = get_buffer_address(&buf, 7);
-
-	if (addr1 != buf.base_begin || addr2 != buf.base_end) {
-		trace_printk("addr1 = %p, addr2 = %p, base_begin = %p, base_end = %p\n", addr1, addr2, buf.base_begin, buf.base_end);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
-
-test_result_t test_get_buffer_address_end_begin_bigger_less(void) {
-	struct ps_buffer buf;
-
-	init_buffer(&buf, 10, BBBLOCK_SSSIZE);
-	deinit_buffer(&buf);
-	buf.base_begin_num = 0x7FFFFFFF - 1;
-	buf.begin_num = 0x7FFFFFFF - 3;
-	buf.begin = buf.base_end - 1 * BBBLOCK_SSSIZE;
-	buf.end_num = 0x7FFFFFFF + 2;
-	buf.end = buf.base_begin + 3 * BBBLOCK_SSSIZE;
-
-	void *addr1 = get_buffer_address(&buf, 0x7FFFFFFF - 2);
-	void *addr2 = get_buffer_address(&buf, 0x7FFFFFFF - 1);
-
-	if (addr1 != buf.base_end || addr2 != buf.base_begin) {
-		trace_printk("addr1 = %p, addr2 = %p\n", addr1, addr2);
-		return EXPECT;
-	}
-	return SUCCESS;
-}
 
 test_result_t stest_create_acquire_node(void) {
 	struct ps_node *node = NULL, *tmp_node = NULL;
@@ -592,50 +312,161 @@ test_result_t stest_create_find_publish_node(void) {
 	return SUCCESS;
 }
 
-test_result_t stest_buffer(void) {
+test_result_t stest_find_free_position_pop(void) {
+	struct ps_position *pos1 = NULL, *pos2 = NULL;
 	struct ps_buffer buf;
-	struct ps_publisher *pub = NULL;
-	struct ps_position *pos = NULL;
-	int msg_num = 0;
-	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
-	char input[20] = {'\0'};
-
-	//TODO: Надо с разными числами поиграться (менять в msg_num)
-	//1)Инициализировать все данные
-	int err1 = create_position_struct(&pos);
-	int err2 = create_publisher_struct(current->pid, &pub);
-	int err3 = init_buffer(&buf, 3, 20);
-	//2)Написать сообщение в буфер
-	int flag = is_buffer_full(&buf);
-	void *addr = get_buffer_address(&buf, msg_num);
-	set_prohibition_num(&pub->proh, msg_num);
-	prohibit_buffer(&buf, &pub->proh);
-	create_last_message(&buf);
-	int err6 = write_to_buffer(&buf, addr, output);
-	//TODO: Надо посмотреть как будут в перемешку c операциями чтения работать
-	unprohibit_buffer(&buf, &pub->proh);
-
-	//3)Получение сообщения
-	int err8 = is_buffer_access_reading(&buf, msg_num);
-	void *addr2 = get_buffer_address(&buf, msg_num);
-	int err9 = read_from_buffer(&buf, addr, input);
-	//TODO: В самой функции удаляется позиция и последнее сообщение после прочтения
-	trace_printk("msg_num = %d, begin_num = %d, end_read_num = %d\n", msg_num, buf.begin_num, buf.end_read_num);
-
-	//4)Удаление всех данных
-	int err10 = delete_position_struct(pos);
-	int err11 = delete_publisher_struct(pub);
-	int err12 = deinit_buffer(&buf);
-
-	if (err1 || err2 || err3 || flag || !addr || err6 || !err8 || err9 || err10 || err11 || err12 || !addr2 || addr != addr2) {
-		trace_printk("err1 = %d, err2 = %d, err3 = %d, pub = %p, pos = %p\n", err1, err2, err3, pub, pos);
-		trace_printk("err6 = %d, flag = %d, addr = %p\n", err6, flag, addr);
-		trace_printk("err8 = %d, err9 = %d, err10 = %d, err11 = %d, err12 = %d, addr2 = %p\n", err8, err9, err10, err11, err12, addr2);
+	init_buffer(&buf, 2, 3);
+	
+	//По умолчанию должна находится 1 позиция
+	pos1 = find_free_position(&buf);
+	pop_free_position(&buf, pos1);
+	pos2 = find_free_position(&buf);
+	
+	if (!pos1 || pos2) {
+		trace_printk("pos1 = %p, pos2 = %p\n", pos1, pos2);
 		return EXPECT;
 	}
-	return SUCCESS;
+	return ASSERT;
 }
 
+test_result_t stest_find_free_position_pop_double(void) {
+	struct ps_position *pos1 = NULL, *pos2 = NULL, *pos3 = NULL, *pos4 = NULL;
+	struct ps_buffer buf;
+	init_buffer(&buf, 2, 3);
+	
+	//По умолчанию должна находится 1 позиция
+	pos1 = find_free_position(&buf);
+	pop_free_position(&buf, pos1);
+	pos2 = create_position_struct();
+	push_free_position(&buf, pos2);
+	pos3 = find_free_position(&buf);
+	pop_free_position(&buf, pos3);
+	pos4 = find_free_position(&buf);
+	
+	if (!pos1 || !pos2 || pos2 != pos3 || pos4) {
+		trace_printk("pos1 = %p, pos2 = %p, pos3 = %p, pos4 = %p\n", pos1, pos2, pos3, pos4);
+		return EXPECT;
+	}
+	return ASSERT;
+}
+
+test_result_t stest_send_inside(void) {
+	struct ps_buffer buf;
+	struct ps_prohibition proh;
+	char output[3] = {'a', 'b', 'c'};
+	int err = 0;
+	init_buffer(&buf, 2, 3);
+	
+	int flag = try_prohibit_buffer_end(&buf, &proh);
+	if (flag) {
+		err = write_to_buffer_end(&buf, &proh, output);
+		unprohibit_buffer(&buf, &proh);
+	}
+	
+	if (err || buf.end_read != ((char *)buf.base_begin) + 3 || buf.end != ((char *)buf.base_begin) + 3 || buf.stop_pos || memcmp(buf.base_begin, output, 3)) {
+		trace_printk("err = %d,base_begin = %p, begin = %p, end_read = %p, end = %p, buf.stop_pos = %p, delta_read = %ld, delta_write = %ld\noutput=%3s\n", err, buf.base_begin, buf.begin, buf.end_read, buf.end, buf.stop_pos, ((char *)buf.end_read) - (char *)buf.base_begin, ((char *)buf.end) - (char *)buf.base_begin, (char *)buf.base_begin);
+		return EXPECT;
+	}
+	return ASSERT;
+}
+
+test_result_t stest_send_inside_double(void) {
+	struct ps_buffer buf;
+	struct ps_prohibition proh1, proh2;
+	char output[6] = {'a', 'b', 'c', 'd', 'e', 'f'};
+	int err1 = 0, err2 = 0;
+	init_buffer(&buf, 2, 3);
+	
+	int flag1 = try_prohibit_buffer_end(&buf, &proh1);
+	if (flag1) {
+		err1 = write_to_buffer_end(&buf, &proh1, output);
+		unprohibit_buffer(&buf, &proh1);
+	}
+
+	int flag2 = try_prohibit_buffer_end(&buf, &proh2);
+	if (flag2) {
+		err2 = write_to_buffer_end(&buf, &proh2, (char *)output + 3);
+		unprohibit_buffer(&buf, &proh2);
+	}
+
+	
+	if (err1 || err2 || buf.end_read != buf.base_begin || buf.end != buf.base_begin || buf.stop_pos || memcmp(buf.base_begin, output, 6)) {
+		trace_printk("err1 = %d, err2 = %d, base_begin = %p, begin = %p, end_read = %p, end = %p, buf.stop_pos = %p, delta_read = %ld, delta_write = %ld\noutput=%3s\n", err1, err2, buf.base_begin, buf.begin, buf.end_read, buf.end, buf.stop_pos, ((char *)buf.end_read) - (char *)buf.base_begin, ((char *)buf.end) - (char *)buf.base_begin, (char *)buf.base_begin);
+		return EXPECT;
+	}
+	return ASSERT;
+}
+//TODO: Надо проверить функции записи и чтения на
+
+test_result_t stest_write_and_check_position_correct(void) {
+	struct ps_buffer buf;
+	struct ps_prohibition proh;
+	struct ps_position pos;
+	char output[6] = {'a', 'b', 'c', 'd', 'e', 'f'};
+	int err1 = 0, incorrect = 0;
+
+	init_buffer(&buf, 2, 3);
+	int flag = try_prohibit_buffer_end(&buf, &proh);
+	if (flag) {
+		err1 = write_to_buffer_end(&buf, &proh, output);
+		unprohibit_buffer(&buf, &proh);
+	}
+	push_used_position_begin(&buf, &pos);
+	incorrect = is_position_incorrect(&buf, &pos);
+	if (!flag || err1 || incorrect) {
+		trace_printk("flag = %d, err1 = %d, incorrect = %d\n", flag, err1, incorrect);
+		return EXPECT;
+	}
+	return ASSERT;
+}
+
+test_result_t stest_write_and_check_position_correct_read_update(void) {
+	struct ps_buffer buf;
+	struct ps_prohibition proh;
+	struct ps_position pos;
+	char output[6] = {'a', 'b', 'c', 'd', 'e', 'f'};
+	char input[6] = {'1', '1', '1', '1', '1', '1'};
+	int err1 = 0, incorrect = 0;
+	int flag2 = 0;
+
+	init_buffer(&buf, 2, 3);
+	int flag1 = try_prohibit_buffer_end(&buf, &proh);
+	if (flag1) {
+		err1 = write_to_buffer_end(&buf, &proh, output);
+		unprohibit_buffer(&buf, &proh);
+	}
+	push_used_position_begin(&buf, &pos);
+	incorrect = is_position_incorrect(&buf, &pos);
+	int err2 = read_from_buffer_at_position(&buf, &pos, input);
+	int err3 = 0;
+	struct ps_position *new_pos = find_next_position(&buf, &pos);
+	if (!new_pos) {
+		new_pos = find_free_position(&buf);
+		if (new_pos) {
+			pop_free_position(&buf, new_pos);
+			push_used_position_after(&buf, new_pos, &pos);
+		} else {
+			err3 = -ENOSPC;
+		}
+	}
+	if (!err3) {
+		//connect_subscriber_position(sub, new_pos);
+		//disconnect_subscriber_position(sub, pos);
+		flag2 = is_position_used(&buf, &pos);
+		if (!flag2) {
+			pop_used_position(&buf, &pos);
+			push_free_position(&buf, &pos);
+		}
+	}
+
+	if (!flag1 || flag2 || err1 || err2 || err3 || incorrect || !new_pos || memcmp(input, output, 3)) {
+		trace_printk("flag1 = %d, flag2 = %d, err1 = %d, err2 = %d, err3 = %d, new_pos = %p, incorrect = %d\n input = %3s, output = %3s\n", flag1, flag2, err1, err2, err3, new_pos, incorrect, input, output);
+		return EXPECT;
+	}
+	return ASSERT;
+}
+
+//TODO: Сделать функции, которые проверяют работу send и receive
 //TODO: 4)Протестировать более высокоуровневые функции
 test_result_t ftest_create_delete_node(void) {
 	unsigned long id = 0;
@@ -824,14 +655,9 @@ test_result_t ftest_send_receive_normal(void) {
 	int err5 = ps_node_receive(id, input);
 	int err6 = ps_node_delete(id);
 
-	char flag = 0;
-	for (int i = 0; i < 10; i++) {
-		if (input[i] != output[i]) {
-			flag = 1;
-		}
-	}
+	int flag = memcmp(input, output, 10);
 	if(err1 || err2 || err3 || err4 || err5 || err6 || flag || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, id == %lu,\n input:\"%10s\", output:\"%10s\"\n", err1, err2, err3, err4, err5, err6, id, input, output);
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, flag = %d, id == %lu,\n input:\"%10s\", output:\"%10s\"\n", err1, err2, err3, err4, err5, err6, flag, id, input, output);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -842,7 +668,7 @@ test_result_t ftest_send_receive_doubled(void) {
 	unsigned long id = 0;
 	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
 	char input[20] = {'\0'};
-	trace_printk("BEGIN");
+	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -853,14 +679,9 @@ test_result_t ftest_send_receive_doubled(void) {
 	int err7 = ps_node_receive(id, &input[10]);
 	int err8 = ps_node_delete(id);
 
-	char flag = 0;
-	for (int i = 0; i < 20; i++) {
-		if (input[i] != output[i]) {
-			flag = 1;
-		}
-	}
+	int flag = memcmp(input, output, 20);
 	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || flag || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, id == %lu,\n input:\"%20s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, id, input, output);
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, flag = %d, id == %lu,\n input:\"%20s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, flag, id, input, output);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -884,14 +705,10 @@ test_result_t ftest_send_recevie_tripled_without_subscribe(void) {
 	int err9 = ps_node_receive(id, input + 20);
 	int err10 = ps_node_delete(id);
 
-	char flag = 0;
-	for (int i = 0; i < 10; i++) {
-		if (input[i] != output[i + 20] || input[i+10] != output[i+10]) {
-			flag = 1;
-		}
-	}
-	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || !err9 || err10 || flag || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, id, input, output);
+	int flag1 = memcmp(input, output + 20, 10);
+	int flag2 = memcmp(input + 10, output + 10, 10);
+	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || !err9 || err10 || flag1 || flag2 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, flag1 = %d, flag2 = %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, flag1, flag2, id, input, output);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -914,12 +731,7 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 	int err9 = ps_node_receive(id, input + 20);
 	int err10 = ps_node_delete(id);
 
-	char flag = 0;
-	for (int i = 0; i < 20; i++) {
-		if (input[i] != output[i]) {
-			flag = 1;
-		}
-	}
+	
 	if(err1 || err2 || err3 || err4 || err5 || !err6 || err7 || err8 || !err9 || err10 || flag || !id) {
 		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, id, input, output);
 		return EXPECT;
@@ -963,7 +775,13 @@ static int __init pubsub_init(void) {
 	test_get_buffer_address_begin_end_bigger_less();
 	stest_create_acquire_node();
 	stest_create_find_publish_node();
-	stest_buffer();
+	stest_find_free_position_pop();
+	stest_find_free_position_pop_double();
+	stest_send_inside();
+	stest_send_inside_double();
+	stest_write_and_check_position_correct();
+	*/
+	stest_write_and_check_position_correct_read_update();
 	ftest_create_delete_node();
 	ftest_delete_empty();
 	ftest_publish_doubled();
@@ -976,11 +794,10 @@ static int __init pubsub_init(void) {
 	ftest_send_with_publish();
 	ftest_send_receive_without_subscribe();
 	ftest_send_receive_normal();
-	*/
 	ftest_send_receive_doubled();
-	/*
 	ftest_send_recevie_tripled_without_subscribe();
 	ftest_send_receive_tripled_with_subscribe();
+	/*
 	*/
 	return 0;
 }

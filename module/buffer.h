@@ -44,8 +44,8 @@ struct ps_position *find_first_position(struct ps_buffer *buf);
 struct ps_position *create_position_struct(void);
 void delete_position_struct(struct ps_position *pos);
 
-int is_position_not_used(struct ps_buffer *buf, struct ps_position *pos);
-int is_position_correct(struct ps_buffer *buf, struct ps_position *pos);
+int is_position_used(struct ps_buffer *buf, struct ps_position *pos);
+int is_position_incorrect(struct ps_buffer *buf, struct ps_position *pos);
 int positions_used_empty(struct ps_buffer *buf);
 
 void up_position(struct ps_position *pos);

@@ -9,9 +9,7 @@ MODULE_LICENSE("GPL");
 
 static int __init pubsub_init(void) {
 	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
-	char input[20] = {'\0'};
-	void *addr = memcpy(input, output, 20);
-	trace_printk("output = \"%20s\"\tinput = \"%20s\"\t addr = %p, input = %p\n", output, input, addr, input);
+	trace_printk("output = %p, &output[3] = %p, output + 3 = %p, (char *)output + 3 = %p\n", output, &output[3], output + 3, (char *)output + 3);
 	return 0;
 }
 
