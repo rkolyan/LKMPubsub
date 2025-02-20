@@ -75,9 +75,9 @@ int connect_subscriber_position(struct ps_subscriber *sub, struct ps_position *p
     if (!sub || !pos)
         return -EINVAL;
     //TODO: Защита позиций!
-    trace_printk("BEFORE pos->cnt = %u\n", atomic_read(&pos->cnt));
+    //trace_printk("BEFORE pos->cnt = %u\n", atomic_read(&pos->cnt));
     down_position(pos);
-    trace_printk("END pos->cnt = %u\n", atomic_read(&pos->cnt));
+    //trace_printk("END pos->cnt = %u\n", atomic_read(&pos->cnt));
     sub->pos = pos;
     return 0;
 }

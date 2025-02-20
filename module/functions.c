@@ -68,7 +68,7 @@ long ps_node_subscribe(unsigned long node_id) {
 	}
 
 	err = find_subscriber_in_node(node, sub_id, &sub);
-	trace_printk("after find_subscriber_in_node sub  = %p, err = %d\n", sub, err);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
 	if (err == -ENOENT) {
 		err = add_subscriber_in_node(node, sub);
 		trace_printk("after adding to collections err = %d, sub = %p, sub->pos = %p\n", err, sub, sub->pos);
@@ -99,7 +99,7 @@ long ps_node_unsubscribe(unsigned long node_id) {
 	}
 
 	err = find_subscriber_in_node(node, sub_id, &sub);
-	trace_printk("after find_subscriber_in_node sub = %p, err = %d\n", sub, err);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
 	if (!err) {
 		remove_subscriber_in_node(node, sub);
 		trace_puts("after remove collections\n");
@@ -229,10 +229,10 @@ long ps_node_receive(unsigned long node_id, void *info) {
 	}
 
 	err = find_subscriber_in_node(node, sub_id, &sub);
-	trace_printk("after find_subscriber_in_node sub = %p, err = %d\n", sub, err);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
 	if (!err) {
 		err = receive_message_from_node(node, sub, info);
-		trace_printk("after receive_message_from_node sub = %p, info = %p, err = %d\n", sub, info, err);
+		trace_printk("after receive_message_from_node sub = %p, pos = %p, info = %p, err = %d\n", sub, sub->pos, info, err);
 	}
 
 	release_node(node);

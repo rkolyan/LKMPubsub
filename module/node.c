@@ -192,18 +192,14 @@ int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
 	if (!node || !sub)
 		return -EINVAL;
 
-	struct ps_position *pos = create_position_struct();
-	if (!pos)
+	struct ps_position *add_pos = create_position_struct(), *pos = NULL;
+	if (!add_pos)
 		return -ENOMEM;
 	int err = 0;
 	spin_lock(&node->pos_lock);
-	push_free_position(&node->buf, pos);
-	if (!positions_used_empty(&node->buf)) {
-		pos = find_first_position(&node->buf);
-		if (!pos) {
-			err = -EBADF;
-		}
-	} else {
+	push_free_position(&node->buf, add_pos);
+	pos = find_first_position(&node->buf);
+	if (!pos) {
 		pos = find_free_position(&node->buf);
 		if (pos) {
 			pop_free_position(&node->buf, pos);
@@ -212,7 +208,7 @@ int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
 			err = -ENOENT;
 		}
 	}
-	if (pos) {
+	if (!err) {
 		connect_subscriber_position(sub, pos);
 	}
 	spin_unlock(&node->pos_lock);
@@ -261,7 +257,6 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 	int err = 0;
 	struct ps_prohibition *proh = get_publisher_prohibition(pub);
 	trace_printk("pub == %p, proh == %p\n", pub, proh);
-	//TODO: НУЖНО ОБНОВИТЬ begin
 	spin_lock(&node->pos_lock);
 	if (try_prohibit_buffer_end(&node->buf, proh)) {
 		spin_unlock(&node->pos_lock);
@@ -300,6 +295,7 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 		trace_printk("after read_from_buffer_at_position err = %d\n", err);
 		spin_lock(&node->pos_lock);
 		if (!err) {
+			//TODO: next_position находится в used, поэтому возникает, а потом удаляется из free, поэтому возникает хуйня
 			new_pos = find_next_position(&node->buf, pos);
 			trace_printk("after find_next_position new_pos = %p\n", new_pos);
 			if (!new_pos) {
@@ -314,8 +310,8 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 			}
 		}
 		if (!err) {
-			connect_subscriber_position(sub, new_pos);
 			disconnect_subscriber_position(sub, pos);
+			connect_subscriber_position(sub, new_pos);
 			if (!is_position_used(&node->buf, pos)) {
 				pop_used_position(&node->buf, pos);
 				push_free_position(&node->buf, pos);

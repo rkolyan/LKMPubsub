@@ -420,6 +420,7 @@ test_result_t stest_write_and_check_position_correct(void) {
 	return ASSERT;
 }
 
+//TODO: Эта функция падает
 test_result_t stest_write_and_check_position_correct_read_update(void) {
 	struct ps_buffer buf;
 	struct ps_prohibition proh;
@@ -469,6 +470,7 @@ test_result_t stest_write_and_check_position_correct_read_update(void) {
 //TODO: Сделать функции, которые проверяют работу send и receive
 //TODO: 4)Протестировать более высокоуровневые функции
 test_result_t ftest_create_delete_node(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	int err1 = ps_node_create(20, 10, &id);
 	int err2 = ps_node_delete(id);
@@ -481,6 +483,7 @@ test_result_t ftest_create_delete_node(void) {
 }
 
 test_result_t ftest_delete_empty(void) {
+	trace_puts("BEGIN\n");
 	//Типа случайное число
 	unsigned long id = 12423421;
 	
@@ -494,6 +497,7 @@ test_result_t ftest_delete_empty(void) {
 }
 
 test_result_t ftest_publish_doubled(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	
 	int err1 = ps_node_create(30, 10, &id);
@@ -509,6 +513,7 @@ test_result_t ftest_publish_doubled(void) {
 }
 
 test_result_t ftest_publish_unpublish(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	
 	int err1 = ps_node_create(30, 10, &id);
@@ -524,6 +529,7 @@ test_result_t ftest_publish_unpublish(void) {
 }
 
 test_result_t ftest_publish_unpublished_deleted(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 
 	int err1 = ps_node_create(30, 10, &id);
@@ -539,6 +545,7 @@ test_result_t ftest_publish_unpublished_deleted(void) {
 }
 
 test_result_t ftest_unpublish_after_delete(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 
 	int err1 = ps_node_create(2, 10, &id);
@@ -554,6 +561,7 @@ test_result_t ftest_unpublish_after_delete(void) {
 }
 
 test_result_t ftest_subscribe_unsubscribe(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 
 	int err1 = ps_node_create(30, 10, &id);
@@ -569,6 +577,7 @@ test_result_t ftest_subscribe_unsubscribe(void) {
 }
 
 test_result_t ftest_subscribe_unsubscribe_deleted(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 
 	int err1 = ps_node_create(30, 10, &id);
@@ -585,6 +594,7 @@ test_result_t ftest_subscribe_unsubscribe_deleted(void) {
 }
 
 test_result_t ftest_send_without_publish(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char buf[10] = "091234567";
 
@@ -600,9 +610,9 @@ test_result_t ftest_send_without_publish(void) {
 }
 
 test_result_t ftest_send_with_publish(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char buf[10] = "091234567";
-	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -617,10 +627,10 @@ test_result_t ftest_send_with_publish(void) {
 }
 
 test_result_t ftest_send_receive_without_subscribe(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char output[10] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8'};
 	char input[10] = {'\0'};
-	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -643,10 +653,10 @@ test_result_t ftest_send_receive_without_subscribe(void) {
 }
 
 test_result_t ftest_send_receive_normal(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char output[10] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8'};
 	char input[10] = {'\0'};
-	trace_printk("BEGIN");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -665,10 +675,10 @@ test_result_t ftest_send_receive_normal(void) {
 
 //TODO: Надо протестировать функции работы буфера
 test_result_t ftest_send_receive_doubled(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
 	char input[20] = {'\0'};
-	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -687,12 +697,35 @@ test_result_t ftest_send_receive_doubled(void) {
 	return SUCCESS;
 }
 
+test_result_t ftest_send_receive_subscriber_doubled(void) {
+	trace_puts("BEGIN\n");
+	unsigned long id = 0;
+	char output[20] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'};
+	char input[20] = {'\0'};
+
+	int err1 = ps_node_create(2, 10, &id);
+	int err2 = ps_node_publish(id);
+	int err5 = ps_node_subscribe(id);
+	int err3 = ps_node_send(id, output);
+	int err4 = ps_node_send(id, &output[10]);
+	int err6 = ps_node_receive(id, input);
+	int err7 = ps_node_receive(id, &input[10]);
+	int err8 = ps_node_delete(id);
+
+	int flag = memcmp(input, output, 20);
+	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || flag || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, flag = %d, id == %lu,\n input:\"%20s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, flag, id, input, output);
+		return EXPECT;
+	}
+	return SUCCESS;
+}
+
 test_result_t ftest_send_recevie_tripled_without_subscribe(void) {
 	//TODO: Прикол в том, что пока не попался подписчик можно затирать непрочитанные сообщения
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char output[30] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'};
 	char input[30] = {'\0'};
-	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -715,10 +748,10 @@ test_result_t ftest_send_recevie_tripled_without_subscribe(void) {
 }
 
 test_result_t ftest_send_receive_tripled_with_subscribe(void) {
+	trace_puts("BEGIN\n");
 	unsigned long id = 0;
 	char output[30] = {'0', '9', '1', '2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'};
 	char input[30] = {'\0'};
-	trace_puts("BEGIN\n");
 
 	int err1 = ps_node_create(2, 10, &id);
 	int err2 = ps_node_publish(id);
@@ -731,9 +764,10 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 	int err9 = ps_node_receive(id, input + 20);
 	int err10 = ps_node_delete(id);
 
-	
-	if(err1 || err2 || err3 || err4 || err5 || !err6 || err7 || err8 || !err9 || err10 || flag || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, id, input, output);
+	int flag1 = memcmp(input, output, 30);
+
+	if(err1 || err2 || err3 || err4 || err5 || !err6 || err7 || err8 || !err9 || err10 || flag1 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, flag = %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, flag1, id, input, output);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -780,8 +814,8 @@ static int __init pubsub_init(void) {
 	stest_send_inside();
 	stest_send_inside_double();
 	stest_write_and_check_position_correct();
-	*/
 	stest_write_and_check_position_correct_read_update();
+	*/
 	ftest_create_delete_node();
 	ftest_delete_empty();
 	ftest_publish_doubled();
@@ -795,6 +829,7 @@ static int __init pubsub_init(void) {
 	ftest_send_receive_without_subscribe();
 	ftest_send_receive_normal();
 	ftest_send_receive_doubled();
+	ftest_send_receive_subscriber_doubled();
 	ftest_send_recevie_tripled_without_subscribe();
 	ftest_send_receive_tripled_with_subscribe();
 	/*
