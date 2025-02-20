@@ -258,7 +258,8 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 	struct ps_prohibition *proh = get_publisher_prohibition(pub);
 	trace_printk("pub == %p, proh == %p\n", pub, proh);
 	spin_lock(&node->pos_lock);
-	if (try_prohibit_buffer_end(&node->buf, proh)) {
+	if (is_prohibit_success(&node->buf)) {
+		prohibit_buffer_end(&node->buf, proh);
 		spin_unlock(&node->pos_lock);
 
 		err = write_to_buffer_end(&(node->buf), proh, info);

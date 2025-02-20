@@ -357,8 +357,9 @@ test_result_t stest_send_inside(void) {
 	int err = 0;
 	init_buffer(&buf, 2, 3);
 	
-	int flag = try_prohibit_buffer_end(&buf, &proh);
+	int flag = is_prohibit_success(&buf);
 	if (flag) {
+		prohibit_buffer_end(&buf, &proh);
 		err = write_to_buffer_end(&buf, &proh, output);
 		unprohibit_buffer(&buf, &proh);
 	}
@@ -377,14 +378,16 @@ test_result_t stest_send_inside_double(void) {
 	int err1 = 0, err2 = 0;
 	init_buffer(&buf, 2, 3);
 	
-	int flag1 = try_prohibit_buffer_end(&buf, &proh1);
+	int flag1 = is_prohibit_success(&buf);
 	if (flag1) {
+		prohibit_buffer_end(&buf, &proh1);
 		err1 = write_to_buffer_end(&buf, &proh1, output);
 		unprohibit_buffer(&buf, &proh1);
 	}
 
-	int flag2 = try_prohibit_buffer_end(&buf, &proh2);
+	int flag2 = is_prohibit_success(&buf);
 	if (flag2) {
+		prohibit_buffer_end(&buf, &proh2);
 		err2 = write_to_buffer_end(&buf, &proh2, (char *)output + 3);
 		unprohibit_buffer(&buf, &proh2);
 	}
@@ -406,8 +409,9 @@ test_result_t stest_write_and_check_position_correct(void) {
 	int err1 = 0, incorrect = 0;
 
 	init_buffer(&buf, 2, 3);
-	int flag = try_prohibit_buffer_end(&buf, &proh);
+	int flag = is_prohibit_success(&buf);
 	if (flag) {
+		prohibit_buffer_end(&buf, &proh);
 		err1 = write_to_buffer_end(&buf, &proh, output);
 		unprohibit_buffer(&buf, &proh);
 	}
@@ -431,8 +435,9 @@ test_result_t stest_write_and_check_position_correct_read_update(void) {
 	int flag2 = 0;
 
 	init_buffer(&buf, 2, 3);
-	int flag1 = try_prohibit_buffer_end(&buf, &proh);
+	int flag1 = is_prohibit_success(&buf);
 	if (flag1) {
+		prohibit_buffer_end(&buf, &proh);
 		err1 = write_to_buffer_end(&buf, &proh, output);
 		unprohibit_buffer(&buf, &proh);
 	}
@@ -738,10 +743,9 @@ test_result_t ftest_send_recevie_tripled_without_subscribe(void) {
 	int err9 = ps_node_receive(id, input + 20);
 	int err10 = ps_node_delete(id);
 
-	int flag1 = memcmp(input, output + 20, 10);
-	int flag2 = memcmp(input + 10, output + 10, 10);
-	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || !err9 || err10 || flag1 || flag2 || !id) {
-		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, flag1 = %d, flag2 = %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, flag1, flag2, id, input, output);
+	int flag1 = memcmp(input, output + 10, 20);
+	if(err1 || err2 || err3 || err4 || err5 || err6 || err7 || err8 || !err9 || err10 || flag1 || !id) {
+		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, flag1 = %d, id == %lu,\n input:\"%s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, flag1, id, input, output);
 		return EXPECT;
 	}
 	return SUCCESS;
@@ -764,7 +768,7 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 	int err9 = ps_node_receive(id, input + 20);
 	int err10 = ps_node_delete(id);
 
-	int flag1 = memcmp(input, output, 30);
+	int flag1 = memcmp(input, output, 20);
 
 	if(err1 || err2 || err3 || err4 || err5 || !err6 || err7 || err8 || !err9 || err10 || flag1 || !id) {
 		trace_printk("err1 == %d, err2 == %d, err3 == %d, err4 == %d, err5 == %d, err6 == %d, err7 == %d, err8 == %d, err9 == %d, err10 == %d, flag = %d, id == %lu,\n input:\"%30s\", output:\"%20s\"\n", err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, flag1, id, input, output);
@@ -772,6 +776,8 @@ test_result_t ftest_send_receive_tripled_with_subscribe(void) {
 	}
 	return SUCCESS;
 }
+
+//TODO: Сделать буфер с 1 блоком
 
 static int __init pubsub_init(void) {
 	init_nodes();

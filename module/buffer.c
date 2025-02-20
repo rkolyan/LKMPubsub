@@ -78,7 +78,7 @@ int is_position_used(const struct ps_buffer *buf, const struct ps_position *pos)
 }
 
 int is_prohibit_success(const struct ps_buffer *buf) {
-	return !atomic_read(&buf->overflow);
+	return !atomic_read(&buf->overflow) || list_empty(&buf->positions_used);
 }
 
 inline void prohibition_init(struct ps_prohibition *proh) {
@@ -88,37 +88,21 @@ inline void prohibition_init(struct ps_prohibition *proh) {
 //Какие могут быть случаи?
 //Век
 
-int try_prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh) {
-	bool flag = false;
-	if (buf->begin != buf->end) {
-		flag = true;
-	} else {
-		//TODO: Переделать
-		struct ps_prohibition *first_proh = list_first_entry_or_null(&(buf->prohibited), struct ps_prohibition, list);
-		if (first_proh && first_proh->addr == buf->end) {
-			flag = false;
-		} else {
-			struct ps_position *pos = find_first_position(buf);
-			//Если позиции нет, писать можно
-			//Если позиция есть, но она stop_pos, писать можно
-			//Если позиция есть, но её адрес не совпадает с end, то писать можно
-			//Иначе нельзя
-			//TODO: Здесь если !pos должен
-			if (!pos || pos == buf->stop_pos || pos->addr != buf->end) {
-				flag = true;
-			} else {
-				flag = false;
-			}
-		}
-	}
-	if (!flag)
-		return 0;
+void prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh) {
 	proh->addr = buf->end;
+	list_add_tail_rcu(&(proh->list), &(buf->prohibited));
+	//Может стоит обновить begin, пока пользователей нет
+	if (buf->end == buf->begin && atomic_read(&buf->overflow)) {
+		buf->begin += buf->blk_size;
+		if (buf->begin == buf->base_end)
+			buf->begin = buf->base_begin;
+	}
 	buf->end += buf->blk_size;
 	if (buf->end == buf->base_end)
 		buf->end = buf->base_begin;
-	list_add_tail_rcu(&(proh->list), &(buf->prohibited));
-	return 1;
+	if (buf->end == buf->begin) {
+		atomic_set(&buf->overflow, 1);
+	}
 }
 
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
@@ -130,11 +114,6 @@ void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh) {
 			buf->end_read = buf->base_begin;
 		}
 		buf->stop_pos = NULL;
-		if (buf->end_read == buf->begin) {
-			atomic_set(&buf->overflow, 1);
-		} else {
-			atomic_set(&buf->overflow, 0);
-		}
 	}
 	list_del_rcu(&proh->list);
 }
@@ -194,9 +173,9 @@ void push_used_position_after(struct ps_buffer *buf, struct ps_position *new_pos
 	void *addr = pos->addr + buf->blk_size;
 	if (addr == buf->base_end)
 		addr = buf->base_begin;
+	new_pos->addr = addr;
 	if (addr == buf->end_read)
 		buf->stop_pos = new_pos;
-	new_pos->addr = addr;
 	list_add_rcu(&new_pos->list, &pos->list);
 }
 
@@ -208,12 +187,15 @@ void push_used_position_begin(struct ps_buffer *buf, struct ps_position *pos) {
 }
 
 void pop_used_position(struct ps_buffer *buf, struct ps_position *pos) {
+	if (pos == list_first_entry_or_null(&buf->positions_used, struct ps_position, list)) {
+		atomic_set(&buf->overflow, 0);
+	}
 	list_del_rcu(&pos->list);
-	if (pos == buf->stop_pos)
-		buf->stop_pos = NULL;
 	struct ps_position *next_pos = list_first_entry_or_null(&buf->positions_used, struct ps_position, list);
 	if (next_pos)
 		buf->begin = next_pos->addr;
+	if (pos == buf->stop_pos)
+		buf->stop_pos = NULL;
 }
 
 struct ps_position *find_free_position(struct ps_buffer *buf) {

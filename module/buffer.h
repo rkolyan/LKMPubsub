@@ -47,6 +47,7 @@ void delete_position_struct(struct ps_position *pos);
 
 int is_position_used(const struct ps_buffer *buf, const struct ps_position *pos);
 int is_position_incorrect(const struct ps_buffer *buf, const struct ps_position *pos);
+int is_prohibit_success(const struct ps_buffer *buf);
 
 void up_position(struct ps_position *pos);
 void down_position(struct ps_position *pos);
@@ -63,7 +64,7 @@ int read_from_buffer_at_position(struct ps_buffer *buf, struct ps_position *pos,
 #endif
 
 void prohibition_init(struct ps_prohibition *proh);
-int try_prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh);
+void prohibit_buffer_end(struct ps_buffer *buf, struct ps_prohibition *proh);
 void unprohibit_buffer(struct ps_buffer *buf, struct ps_prohibition *proh);
 
 #endif
