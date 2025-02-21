@@ -48,7 +48,8 @@ static int sys_ni_syscall_kretprobe_handler(struct kretprobe_instance *ri, struc
 
 struct kretprobe syscall_kretprobe = {
 	.kp.symbol_name = "__x64_sys_ni_syscall",
-	.handler = sys_ni_syscall_kretprobe_handler
+	.handler = sys_ni_syscall_kretprobe_handler,
+	.maxactive = 10
 };
 
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);

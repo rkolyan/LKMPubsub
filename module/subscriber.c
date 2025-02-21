@@ -7,8 +7,8 @@
 #include <linux/vmalloc.h>
 
 int create_subscriber_struct(pid_t pid, struct ps_subscriber **result) {
-    if (pid < 0 || !result)
-        return -EINVAL;
+	if (!result)
+		return -EINVAL;
     struct ps_subscriber *sub = vzalloc(sizeof(struct ps_subscriber));
     if (!sub)
         return -ENOMEM;

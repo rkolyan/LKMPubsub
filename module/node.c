@@ -13,34 +13,26 @@
 
 DEFINE_HASHTABLE(nodes, NODE_HASHTABLE_BITS);
 static spinlock_t nodes_lock;
-atomic_t nodes_count;
+atomic_t process_count;
 
 int init_nodes(void){
 	spin_lock_init(&nodes_lock);
-	atomic_set(&nodes_count, 0);
+	atomic_set(&process_count, 0);
 	return 0;
 }
 
-//TODO: По идее там в начале будут удалены перехватчики
+//По идее там в начале будут удалены перехватчики
 int deinit_nodes(void) {
 	struct ps_node *node = NULL;
-	int bkt = 0, node_unused_count = 0;
+	int bkt = 0;
 	struct hlist_node *tmp = NULL;
-	rcu_read_lock();
-	hash_for_each_rcu(nodes, bkt, node, hlist) {
-		if(atomic_cmpxchg(&node->delete_flag, 0, 1) && !atomic_read(&node->use_count)) {
-			node_unused_count++;
-		}
-	}
-	rcu_read_unlock();
-	while(atomic_read(&nodes_count) != node_unused_count) {
+	while(atomic_read(&process_count)) {
 		mdelay(50);
 	};
 	hash_for_each_safe(nodes, bkt, tmp, node, hlist) {
 		hash_del(&(node->hlist));
 		delete_node_struct(node);
 	}
-	//TODO: Доделать эту парашу
 	return 0;
 }
 
@@ -81,10 +73,8 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	spin_lock_init(&node->subs_lock);
 	spin_lock_init(&node->pubs_lock);
 	spin_lock_init(&node->pos_lock);
-	//TODO: Как решить проблему с удалением
 	atomic_set(&(node->delete_flag), 0);
 	atomic_set(&(node->use_count), 0);
-	atomic_inc(&(nodes_count));
 	*result = node;
 	return 0;
 }
@@ -96,7 +86,6 @@ int delete_node_struct(struct ps_node *node) {
 	clear_subscriber_collection(&(node->subs_coll));
 	deinit_buffer(&(node->buf));
 	vfree(node);
-	atomic_dec(&nodes_count);
 	return 0;
 }
 
@@ -122,14 +111,16 @@ int acquire_node(unsigned long id, struct ps_node **result) {
 	int err = 0;
 	rcu_read_lock();
 	hash_for_each_possible_rcu(nodes, node, hlist, id) {
-		if (node->id == id)
+		if (node->id == id) {
+			atomic_inc(&node->use_count);
+			atomic_inc(&process_count);
 			break;
+		}
 	}
-	if (!node || node->id != id) {
-		err = -ENOENT;
-	}
-	if (!err) {
+	if (node) {
 		*result = node;
+	} else {
+		err = -ENOENT;
 	}
 	rcu_read_unlock();
 	return err;
@@ -139,13 +130,13 @@ int release_node(struct ps_node *node) {
 	if (!node)
 		return -EINVAL;
 	atomic_dec(&node->use_count);
+	atomic_dec(&process_count);
 	return 0;
 }
 
 int add_node(struct ps_node *node) {
-	if (!node) {
+	if (!node)
 		return -EINVAL;
-	}
 	spin_lock(&nodes_lock);
 	hash_add_rcu(nodes, &(node->hlist), node->id);
 	spin_unlock(&nodes_lock);
@@ -153,9 +144,8 @@ int add_node(struct ps_node *node) {
 }
 
 int remove_node(struct ps_node *node) {
-	if (!node) {
+	if (!node)
 		return -EINVAL;
-	}
 	spin_lock(&nodes_lock);
 	hash_del(&(node->hlist));
 	spin_unlock(&nodes_lock);
@@ -296,7 +286,6 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 		trace_printk("after read_from_buffer_at_position err = %d\n", err);
 		spin_lock(&node->pos_lock);
 		if (!err) {
-			//TODO: next_position находится в used, поэтому возникает, а потом удаляется из free, поэтому возникает хуйня
 			new_pos = find_next_position(&node->buf, pos);
 			trace_printk("after find_next_position new_pos = %p\n", new_pos);
 			if (!new_pos) {
