@@ -39,10 +39,9 @@ static int __init pubsub_init(void) {
 static void __exit pubsub_exit(void)
 {
     //1)Удаление функций из таблицы системных вызовов
-    int err = unhook_functions();
-    err = unhook_functions();
+    unhook_functions();
     //2)Очистка нодов и всего такого
-    err = deinit_nodes();
+    deinit_nodes();
 }
 
 module_init(pubsub_init);

@@ -6,6 +6,6 @@
 #define MOD2_SYSCALLS_H
 
 int hook_functions(void);
-int unhook_functions(void);
+void unhook_functions(void);
 
 #endif //MOD2_SYSCALLS_H

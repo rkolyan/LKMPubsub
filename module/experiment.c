@@ -2,12 +2,11 @@
 #include <linux/module.h>
 #include <linux/kprobes.h>
 #include <linux/preempt.h>
-#include <asm/special_insns.h>
 
 static int entry_handler(struct pt_regs *regs) {
 	trace_printk("Атомарный контекст:%d\tКонтекст прерывания:%d\tКонтекст процесса:%d\n", in_atomic(), in_interrupt(), in_task());
-	trace_printk("regs->di = %lx, regs->si = %lx, regs->dx = %lx\n", regs->di, regs->si, regs->dx);
-	return -ENOENT;
+	trace_printk("regs->orig_ax = %lu, regs->ax = %lu, regs->di = %lu, regs->si = %lu, regs->dx = %lu\n", regs->orig_ax, regs->ax, regs->di, regs->si, regs->dx);
+	return -EFAULT;
 }
 
 void *addr1;
@@ -24,7 +23,7 @@ static int __init my_module_init(void) {
 	//TODO: 2)Вычисляем смещение от entry_handler до адреса __x64_sys_ni_syscall
 	long offset = (long)(addr2 - (addr1 + 5));
 	//TODO: 3)Записываем E9 + 4 байта в буфер
-	char operation[] = {0xE9, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+	char operation[] = {0xE8, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
 	*((int *)(operation + 1)) = offset;
 	//TODO: 4)Отключаем CR0
 	unsigned long cr0 = read_cr0();
