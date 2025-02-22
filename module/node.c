@@ -1,78 +1,39 @@
-#include "position.h"
 #include "buffer.h"
 #include "subscriber.h"
 #include "publisher.h"
 #include "node.h"
 
 
-//#include <linux/rwsem.h>
-#include <linux/rwlock.h>
+#include <linux/spinlock.h>
 #include <linux/vmalloc.h>
+#include <linux/atomic.h>
 #include <linux/delay.h>
 
 #define NODE_HASHTABLE_BITS 4
 
 DEFINE_HASHTABLE(nodes, NODE_HASHTABLE_BITS);
-static rwlock_t nodes_rwlock;
+static spinlock_t nodes_lock;
+atomic_t process_count;
 
 int init_nodes(void){
-	//nodes и nodes_rwlock уже до вызова определелены
-	ps_nodes_init_lock();
+	spin_lock_init(&nodes_lock);
+	atomic_set(&process_count, 0);
 	return 0;
 }
 
+//По идее там в начале будут удалены перехватчики
 int deinit_nodes(void) {
-	ps_nodes_write_lock();
 	struct ps_node *node = NULL;
 	int bkt = 0;
 	struct hlist_node *tmp = NULL;
+	while(atomic_read(&process_count)) {
+		mdelay(50);
+	};
 	hash_for_each_safe(nodes, bkt, tmp, node, hlist) {
 		hash_del(&(node->hlist));
 		delete_node_struct(node);
 	}
-	ps_nodes_write_unlock();
 	return 0;
-}
-
-void ps_nodes_init_lock(void) {
-	rwlock_init(&nodes_rwlock);
-}
-
-void ps_nodes_read_lock(void) {
-	read_lock(&nodes_rwlock);
-}
-
-void ps_nodes_read_unlock(void) {
-	read_unlock(&nodes_rwlock);
-}
-
-void ps_nodes_write_lock(void) {
-	write_lock(&nodes_rwlock);
-}
-void ps_nodes_write_unlock(void) {
-	//trace_printk("%s:&nodes_rwlock = %p\n", __func__, &nodes_rwlock);
-	write_unlock(&nodes_rwlock);
-	//trace_printk("%s:after write_unlock\n", __func__);
-}
-
-void ps_current_read_lock(struct ps_node *node) {
-	//down_read(&(node->node_rwsem));
-	read_lock(&(node->node_rwsem));
-}
-
-void ps_current_read_unlock(struct ps_node *node) {
-	//up_read(&(node->node_rwsem));
-	read_unlock(&(node->node_rwsem));
-}
-
-void ps_current_write_wait(struct ps_node *node) {
-	trace_printk("before down_write, node=%p, &(node->node_rwsem)=%p\n", node, &(node->node_rwsem));
-	//down_write(&(node->node_rwsem));
-	write_lock(&(node->node_rwsem));
-	trace_puts("after down_write\n");
-	//up_write(&(node->node_rwsem));
-	write_unlock(&(node->node_rwsem));
-	trace_puts("after up_write\n");
 }
 
 #ifndef PS_TEST
@@ -94,136 +55,102 @@ int get_node_id(struct ps_node *node, unsigned long *result) {
 }
 
 int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **result) {
-	if (buf_size == 0 || block_size == 0 || block_size > buf_size || result == NULL)
+	if (buf_size == 0 || block_size == 0 || result == NULL)
 		return -EINVAL;
 	struct ps_node *node = vzalloc(sizeof(struct ps_node));
 	if (!node)
 		return -ENOMEM;
-	trace_puts("vzalloc successed!\n");
 	INIT_HLIST_NODE(&(node->hlist));
 	node->id = (unsigned long) (&(node->hlist));
 	int err = init_buffer(&(node->buf), buf_size, block_size);
 	if (err) {
-		//pr_err(__func__ ":Нельзя выделить памяти для вспомогательной информации ps_buffer!");
 		vfree(node);
 		return err;
 	}
-	init_positions_desc(&(node->desc));
 	init_publisher_collection(&(node->pubs_coll));
 	init_subscriber_collection(&(node->subs_coll));
-	//init_rwsem(&(node->node_rwsem));
-	rwlock_init(&(node->node_rwsem));
+	trace_printk("&subs_lock == %p, &pubs_lock == %p, &nodes_lock == %p\n", &node->subs_lock, &node->pubs_lock, &nodes_lock);
+	spin_lock_init(&node->subs_lock);
+	spin_lock_init(&node->pubs_lock);
+	spin_lock_init(&node->pos_lock);
+	atomic_set(&(node->delete_flag), 0);
+	atomic_set(&(node->use_count), 0);
 	*result = node;
-	trace_puts("vzalloc ended!\n");
 	return 0;
 }
 
 int delete_node_struct(struct ps_node *node) {
 	if (!node)
 		return -EINVAL;
-	trace_printk("%s:before clear_publisher_collection\n", __func__);
 	clear_publisher_collection(&(node->pubs_coll));
-	trace_printk("%s:before clear_subscriber_collection\n", __func__);
 	clear_subscriber_collection(&(node->subs_coll));
-	trace_printk("%s:before deinit_positions_desc\n", __func__);
-	deinit_positions_desc(&(node->desc));
-	trace_printk("%s:before deinit_buffer\n", __func__);
 	deinit_buffer(&(node->buf));
-	trace_printk("%s:before vfree\n", __func__);
 	vfree(node);
-
 	return 0;
 }
 
-int find_node(unsigned long id, struct ps_node **result) {
+int delete_node_struct_if_unused(struct ps_node *node) {
+	if (!node)
+		return -EINVAL;
+	//Нужно чтоб во время удаления не оказалось, что нода ещё кем-то используется, но use_count ещё не инкрементирована. 
+	synchronize_rcu();
+	if (atomic_read(&(node->delete_flag)) && !atomic_read(&(node->use_count))) {
+		delete_node_struct(node);
+	}
+	return 0;
+}
+
+void mark_node_unused(struct ps_node *node) {
+	atomic_set(&(node->delete_flag), 1);
+}
+
+int acquire_node(unsigned long id, struct ps_node **result) {
 	if (!result)
 		return -EINVAL;
 	struct ps_node *node = NULL;
-	hash_for_each_possible(nodes, node, hlist, id) {
-		if (node->id == id)
+	int err = 0;
+	rcu_read_lock();
+	hash_for_each_possible_rcu(nodes, node, hlist, id) {
+		if (node->id == id) {
+			atomic_inc(&node->use_count);
+			atomic_inc(&process_count);
 			break;
-	}
-	if (!node || node->id != id)
-		return -ENOENT;
-	*result = node;
-	return 0;
-}
-
-int add_position_in_node(struct ps_node *node, struct ps_position *pos) {
-	if (!node || !pos)
-		return -EINVAL;
-	spin_lock(&(node->pos_lock));
-	push_free_position(&(node->desc), pos);
-	spin_unlock(&(node->pos_lock));
-	return 0;
-}
-
-int remove_position_in_node(struct ps_node *node) {
-	if (!node)
-		return -EINVAL;
-	struct ps_position *pos = NULL;
-	spin_lock(&(node->pos_lock));
-	int err = find_free_position(&(node->desc), &pos);
-	if (!err)
-		pop_free_position(&(node->desc), pos);
-	spin_unlock(&(node->pos_lock));
-	return err;
-}
-
-int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
-	if (!node || !sub)
-		return -EINVAL;
-
-	spin_lock(&(node->subs_lock));
-	add_subscriber(&(node->subs_coll), sub);
-	spin_unlock(&(node->subs_lock));
-	struct ps_position *pos = NULL;
-	spin_lock(&(node->pos_lock));
-	int err = find_first_position(&(node->desc), &pos);
-	if (!err) {
-		connect_subscriber_position(sub, pos);
-	} else if (err == -ENOENT) {
-		err = find_free_position(&(node->desc), &pos);
-		if (!err) {
-			pop_free_position(&(node->desc), pos);
-			int msg_num = get_buffer_begin_num(&(node->buf));
-			set_position_num(pos, msg_num);
-			connect_subscriber_position(sub, pos);
-			push_used_position_last(&(node->desc), pos);
-		} else {
-			err = EBADF;
 		}
 	}
-	spin_unlock(&(node->pos_lock));
+	if (node) {
+		*result = node;
+	} else {
+		err = -ENOENT;
+	}
+	rcu_read_unlock();
 	return err;
 }
 
-int remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
-	if (!node || !sub)
+int release_node(struct ps_node *node) {
+	if (!node)
 		return -EINVAL;
-	struct ps_position *pos = NULL;
-	spin_lock(&(node->subs_lock));
-	pos = get_subscriber_position(sub);
-	spin_lock(&(node->pos_lock));
-	disconnect_subscriber_position(sub);
-	if (is_position_not_used(pos)) {
-		pop_used_position(&(node->desc), pos);
-		push_free_position(&(node->desc), pos);
-	}
-	spin_unlock(&(node->pos_lock));
-	remove_subscriber(&(node->subs_coll), sub);
-	spin_unlock(&(node->subs_lock));
+	atomic_dec(&node->use_count);
+	atomic_dec(&process_count);
 	return 0;
 }
 
-int find_subscriber_in_node(struct ps_node *node, pid_t pid, struct ps_subscriber **result) {
-	if (!node || pid < 0 || !result)
+int add_node(struct ps_node *node) {
+	if (!node)
 		return -EINVAL;
-	int err = 0;
-	//down_read(node->subs_rwsem);
-	err = find_subscriber(&(node->subs_coll), pid, result);
-	//up_read(node->subs_rwsem);
-	return err;
+	spin_lock(&nodes_lock);
+	hash_add_rcu(nodes, &(node->hlist), node->id);
+	spin_unlock(&nodes_lock);
+	return 0;
+}
+
+int remove_node(struct ps_node *node) {
+	if (!node)
+		return -EINVAL;
+	spin_lock(&nodes_lock);
+	hash_del(&(node->hlist));
+	spin_unlock(&nodes_lock);
+	synchronize_rcu();
+	return 0;
 }
 
 int add_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
@@ -238,8 +165,7 @@ int add_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
 int find_publisher_in_node(struct ps_node *node, pid_t pid, struct ps_publisher **result) {
 	if (!node || pid < 0 || !result)
 		return -EINVAL;
-	int err = find_publisher(&(node->pubs_coll), pid, result);
-	return err;
+	return find_publisher(&(node->pubs_coll), pid, result);
 }
 
 int remove_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
@@ -248,84 +174,67 @@ int remove_publisher_in_node(struct ps_node *node, struct ps_publisher *pub) {
 	spin_lock(&(node->pubs_lock));
 	int err = remove_publisher(&(node->pubs_coll), pub);
 	spin_unlock(&(node->pubs_lock));
+	synchronize_rcu();
 	return err;
 }
 
-int add_node(struct ps_node *node) {
-	if (!node) {
+int add_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
+	if (!node || !sub)
 		return -EINVAL;
-	}
-	hash_add(nodes, &(node->hlist), node->id);
-	return 0;
-}
 
-int remove_node(struct ps_node *node) {
-	if (!node) {
-		return -EINVAL;
-	}
-	hash_del(&(node->hlist));
-	return 0;
-}
-
-#ifndef PS_TEST
-int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void __user *info) {
-#else
-int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void *info) {
-#endif
-	if (!node || !info || !sub)
-		return -EINVAL;
-	struct ps_position *pos = get_subscriber_position(sub), *next_pos = NULL, *new_pos = NULL;
-	void *addr = NULL;
-	int msg_num = get_position_num(pos), err = 0;
-	//1)Проверка, находится ли текущий номер в области допустимых значений (для этого в buffer необходимо добавить значение end_read, которое обновляется после каждого завершения записи)
-	if (is_buffer_access_reading(&(node->buf), msg_num)) {
-		//2)Получаем по номеру адрес буфера
-		addr = get_buffer_address(&(node->buf), msg_num);
-		//3)Читаем
-		err = read_from_buffer(&(node->buf), addr, info);
-		//4)Далее отказываемся от позиции на этом номере
-		disconnect_subscriber_position(sub);
-		//5)Если позиция не используется - переводим в список свободных позиций
-
-		spin_lock(&(node->pos_lock));
-		if (is_position_not_used(pos)) {
-			pop_used_position(&(node->desc), pos);
-			push_free_position(&(node->desc), pos);
-			if (get_buffer_begin_num(&(node->buf)) == msg_num)
-				delete_first_message(&(node->buf));
+	struct ps_position *add_pos = create_position_struct(), *pos = NULL;
+	if (!add_pos)
+		return -ENOMEM;
+	int err = 0;
+	spin_lock(&node->pos_lock);
+	push_free_position(&node->buf, add_pos);
+	pos = find_first_position(&node->buf);
+	if (!pos) {
+		pos = find_free_position(&node->buf);
+		if (pos) {
+			pop_free_position(&node->buf, pos);
+			push_used_position_begin(&node->buf, pos);
+		} else {
+			err = -ENOENT;
 		}
-		spin_unlock(&(node->pos_lock));
-		msg_num++;
-		spin_lock(&(node->pos_lock));
-		//Тут есть проблема, а как определить подписчику где первое сообщение?(Ответ:по begin, )
-		err = find_msg_num_position(&(node->desc), msg_num, &new_pos);
-		if (!err) {
-			connect_subscriber_position(sub, new_pos);
-		} else if (err == -ENOENT) {
-			err = find_next_position(&(node->desc), pos, &next_pos);
-			if (!err) {
-				err = find_free_position(&(node->desc), &new_pos);
-				if (!err) {
-					pop_free_position(&(node->desc), new_pos);
-					set_position_num(new_pos, msg_num);
-					connect_subscriber_position(sub, new_pos);
-					push_used_position_before(&(node->desc), new_pos, next_pos);
-				}
-			} else if (err == -ENOENT) {
-				err = find_free_position(&(node->desc), &new_pos);
-				if (!err) {
-					pop_free_position(&(node->desc), new_pos);
-					set_position_num(new_pos, msg_num);
-					connect_subscriber_position(sub, new_pos);
-					push_used_position_last(&(node->desc), new_pos);
-				}
-			}
-		}
-		spin_unlock(&(node->pos_lock));
-	} else {
-		err = -EAGAIN;
+	}
+	if (!err) {
+		connect_subscriber_position(sub, pos);
+	}
+	spin_unlock(&node->pos_lock);
+	if (!err) {
+		spin_lock(&(node->subs_lock));
+		add_subscriber(&(node->subs_coll), sub);
+		spin_unlock(&(node->subs_lock));
 	}
 	return err;
+}
+
+void remove_subscriber_in_node(struct ps_node *node, struct ps_subscriber *sub) {
+	struct ps_position *pos = NULL, *del_pos = NULL;
+	spin_lock(&(node->subs_lock));
+	remove_subscriber(&(node->subs_coll), sub);
+	spin_unlock(&(node->subs_lock));
+	spin_lock(&(node->pos_lock));
+	pos = get_subscriber_position(sub);
+	disconnect_subscriber_position(sub, pos);
+	if (!is_position_used(&node->buf, pos)) {
+		pop_used_position(&node->buf, pos);
+		push_free_position(&node->buf, pos);
+	}
+	del_pos = find_free_position(&node->buf);
+	if (del_pos)
+		pop_free_position(&node->buf, del_pos);
+	spin_unlock(&node->pos_lock);
+	if (del_pos)
+		delete_position_struct(del_pos);
+	synchronize_rcu();
+}
+
+int find_subscriber_in_node(struct ps_node *node, pid_t pid, struct ps_subscriber **result) {
+	if (!node || pid < 0 || !result)
+		return -EINVAL;
+	return find_subscriber(&(node->subs_coll), pid, result);
 }
 
 #ifndef PS_TEST
@@ -335,26 +244,72 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 #endif
 	if (!node || !info || !pub)
 		return -EINVAL;
-	int msg_num = 0, err = 0;
-	void *addr = NULL;
+	int err = 0;
 	struct ps_prohibition *proh = get_publisher_prohibition(pub);
-	spin_lock(&(node->pos_lock));
-	if (!is_buffer_full(&(node->buf))) {
-		//1)Получить свободный номер (это end_num)
-		msg_num = get_buffer_end_num(&(node->buf));
-		set_prohibition_num(proh, msg_num);
-		//2)Получить адрес свободного блока (это end)
-		addr = get_buffer_address(&(node->buf), msg_num);
-		prohibit_buffer(&(node->buf), proh);
+	trace_printk("pub == %p, proh == %p\n", pub, proh);
+	spin_lock(&node->pos_lock);
+	if (is_prohibit_success(&node->buf)) {
+		prohibit_buffer_end(&node->buf, proh);
+		spin_unlock(&node->pos_lock);
 
-		create_last_message(&(node->buf));
-		spin_unlock(&(node->pos_lock));
+		err = write_to_buffer_end(&(node->buf), proh, info);
 
-		err = write_to_buffer(&(node->buf), addr, info);
-
-		spin_lock(&(node->pos_lock));
+		spin_lock(&node->pos_lock);
 		unprohibit_buffer(&(node->buf), proh);
+	} else {
+		//Пока не все сообщения прочитаны
+		err = -EAGAIN;
 	}
-	spin_unlock(&(node->pos_lock));
+	spin_unlock(&node->pos_lock);
+	return err;
+}
+
+#ifndef PS_TEST
+int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void __user *info) {
+#else
+int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, void *info) {
+#endif
+	if (!node || !info || !sub)
+		return -EINVAL;
+	int err = 0;
+	struct ps_position *pos = get_subscriber_position(sub), *new_pos = NULL;
+	//trace_printk("after get_subscriber_position pos = %p, sub = %p\n", pos, sub);
+	int flag = is_position_incorrect(&node->buf, pos);
+	trace_printk("after is_position_incorrect flag = %d, pos = %p\n", flag, pos);
+	if (pos)
+		trace_printk("pos->addr = %p, diff_begin = %ld, diff_end_read = %ld\n", pos->addr, node->buf.begin - pos->addr, node->buf.end - pos->addr);
+	else
+		return -EBADF;
+	if (!flag) {
+		trace_puts("after is_position_correct\n");
+		err = read_from_buffer_at_position(&node->buf, pos, info);
+		trace_printk("after read_from_buffer_at_position err = %d\n", err);
+		spin_lock(&node->pos_lock);
+		if (!err) {
+			new_pos = find_next_position(&node->buf, pos);
+			trace_printk("after find_next_position new_pos = %p\n", new_pos);
+			if (!new_pos) {
+				new_pos = find_free_position(&node->buf);
+				trace_printk("after find_free_position new_pos = %p\n", new_pos);
+				if (new_pos) {
+					pop_free_position(&node->buf, new_pos);
+					push_used_position_after(&node->buf, new_pos, pos);
+				} else {
+					err = -ENOSPC;
+				}
+			}
+		}
+		if (!err) {
+			disconnect_subscriber_position(sub, pos);
+			connect_subscriber_position(sub, new_pos);
+			if (!is_position_used(&node->buf, pos)) {
+				pop_used_position(&node->buf, pos);
+				push_free_position(&node->buf, pos);
+			}
+		}
+		spin_unlock(&node->pos_lock);
+	} else {
+		err = -EAGAIN;//Пока новые сообщения не приходили
+	}
 	return err;
 }

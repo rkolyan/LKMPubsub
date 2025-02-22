@@ -5,7 +5,9 @@
 #ifndef MOD2_SUBSCRIBER_H
 #define MOD2_SUBSCRIBER_H
 
-#include "position.h"
+#include "buffer.h"
+
+#include <linux/hashtable.h>
 
 #define SUBSCRIBER_HASHTABLE_BITS 3
 
@@ -33,6 +35,6 @@ int add_subscriber(struct ps_subscribers_collection *coll, struct ps_subscriber 
 int remove_subscriber(struct ps_subscribers_collection *coll, struct ps_subscriber *sub);
 
 int connect_subscriber_position(struct ps_subscriber *sub, struct ps_position *pos);
-int disconnect_subscriber_position(struct ps_subscriber *sub);
+int disconnect_subscriber_position(struct ps_subscriber *sub, struct ps_position *pos);
 
 #endif //MOD2_SUBSCRIBER_H

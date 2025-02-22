@@ -15,43 +15,35 @@ long ps_node_create(size_t buf_size, size_t block_size, unsigned long *result) {
 	int err = create_node_struct(buf_size, block_size, &node);
 	trace_printk("after create_node_struct node = %p, node_id = %lu,  err = %d\n", node, node->id, err);
 	if (err) {
-		trace_puts("Нельзя добавить топик!\n");
+		trace_puts("Нельзя добавить node!\n");
 		return err;
 	}
-	ps_nodes_write_lock();
-	trace_puts("after ps_nodes_write_lock\n");
 	add_node(node);
-	if (get_node_id(node, result)) {
+	err = get_node_id(node, result);
+       	if (err) {
 		trace_printk("get_node return EAGAIN(\n");
+		remove_node(node);
+		mark_node_unused(node);
+		delete_node_struct_if_unused(node);
+		return err;
 	}
-	trace_puts("after get_node_id\n");
-	ps_nodes_write_unlock();
-	trace_puts("after ps_nodes_write_unlock\nEND\n");
+	trace_puts("END\n");
 	return 0;
 }
 
 long ps_node_delete(unsigned long node_id) {
 	struct ps_node *node = NULL;
 	long err = 0;
-	ps_nodes_write_lock();
-	trace_printk("begin node_id = %lu\n", node_id);
-	err = find_node(node_id, &node);
-	trace_printk("after find_node err = %ld, node = %p\n", err, node);
-	if (!err) {
-		remove_node(node);
-		trace_puts("after remove_node\n");
+	err = acquire_node(node_id, &node);
+	trace_printk("after acquire_node err = %ld, node = %p\n", err, node);
+	if (err) {
+		return err;
 	}
-	trace_puts("before ps_nodes_write_unlock\n");
-	ps_nodes_write_unlock();
-	trace_puts("after ps_nodes_write_unlock\n");
-	if (!err) {
-		ps_current_write_wait(node);
-		trace_puts("after ps_current_write_wait\n");
-		//TODO: Доделать delete_node
-		trace_puts("before delete_node_struct\n");
-		err = delete_node_struct(node);
-		trace_puts("after delete_node_struct\n");
-	}
+	remove_node(node);
+	trace_puts("after remove_node\n");
+	release_node(node);
+	mark_node_unused(node);
+	delete_node_struct_if_unused(node);
 	return err;
 }
 
@@ -60,50 +52,34 @@ long ps_node_subscribe(unsigned long node_id) {
 	int err = 0;
 	struct ps_node *node = NULL;
 	struct ps_subscriber *sub = NULL;
-	struct ps_position *pos = NULL;
 
 	trace_printk("BEGIN node_id = %lu\n", node_id);
 	err = create_subscriber_struct(sub_id, &sub);
 	trace_printk("after create_subscriber_struct sub  = %p, err = %d\n", sub, err);
 	if (err)
 		return err;
-	err = create_position_struct(&pos);
-	trace_printk("after create_position_struct pos  = %p, err = %d\n", pos, err);
+
+	err = acquire_node(node_id, &node);
+	trace_printk("after acquire_node node = %p, node_id = %ld\n", node, node_id);
+
 	if (err) {
-		delete_position_struct(pos);
-	trace_printk("after ps_nodes_read_lock\n");
-		return -ENOMEM;
+		trace_puts("node not found\n");
+		return err;
 	}
 
-	ps_nodes_read_lock();
-	trace_printk("after ps_nodes_read_lock\n");
-
-	err = find_node(node_id, &node);
-	trace_printk("after find_node node = %p, node_id = %ld\n", node, node_id);
-	if (!err) {
-		ps_current_read_lock(node);
-	trace_puts("after ps_current_read_lock\n");
+	err = find_subscriber_in_node(node, sub_id, &sub);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
+	if (err == -ENOENT) {
+		err = add_subscriber_in_node(node, sub);
+		trace_printk("after adding to collections err = %d, sub = %p, sub->pos = %p\n", err, sub, sub->pos);
 	}
-
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
-
-	if (!err) {
-		err = find_subscriber_in_node(node, sub_id, &sub);
-	trace_printk("after find_subscriber_in_node sub  = %p, err = %d\n", sub, err);
-		if (err == -ENOENT) {
-			add_position_in_node(node, pos);
-			add_subscriber_in_node(node, sub);
-	trace_puts("after adding to collections\n");
-		}
-		ps_current_read_unlock(node);
-	trace_puts("after ps_current_read_unlock\n");
-	}
-	if (err) {
-		delete_position_struct(pos);
+       	if (err) {
 		delete_subscriber_struct(sub);
-	trace_puts("after delete structures\n");
+		trace_puts("after delete structures\n");
 	}
+
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
@@ -113,37 +89,25 @@ long ps_node_unsubscribe(unsigned long node_id) {
 	int err = 0;
 	struct ps_node *node = NULL;
 	struct ps_subscriber *sub = NULL;
-	struct ps_position *pos = NULL;
 	trace_puts("BEGIN\n");
-	ps_nodes_read_lock();
-	trace_printk("after ps_nodes_read_lock\n");
 
-	err = find_node(node_id, &node);
-	trace_printk("after find_node node  = %p, err = %d\n", node, err);
-	if (!err) {
-		ps_current_read_lock(node);
-	trace_puts("after ps_current_read_lock\n");
+	err = acquire_node(node_id, &node);
+
+	trace_printk("after acquire_node node  = %p, err = %d\n", node, err);
+	if (err) {
+		return err;
 	}
 
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
-
+	err = find_subscriber_in_node(node, sub_id, &sub);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
 	if (!err) {
-		err = find_subscriber_in_node(node, sub_id, &sub);
-	trace_printk("after find_subscriber_in_node sub = %p, err = %d\n", sub, err);
-		if (!err) {
-			remove_subscriber_in_node(node, sub);
-			remove_position_in_node(node);
+		remove_subscriber_in_node(node, sub);
 		trace_puts("after remove collections\n");
-		}
-		ps_current_read_unlock(node);
-	trace_puts("after ps_current_read_unlock\n");
-		if (!err) {
-			delete_position_struct(pos);
-			delete_subscriber_struct(sub);
-	trace_puts("after delete structures\n");
-		}
+		delete_subscriber_struct(sub);
+		trace_puts("after delete structures\n");
 	}
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
@@ -160,34 +124,27 @@ long ps_node_publish(unsigned long node_id) {
 		return err;
 	}
 
-	ps_nodes_read_lock();
-	trace_puts("after ps_nodes_read_lock\n");
-
-	err = find_node(node_id, &node);
+	err = acquire_node(node_id, &node);
 	trace_printk("after find_node node = %p, err = %d\n", node, err);
-	if (!err && node) {
-		ps_current_read_lock(node);
-		trace_puts("after ps_current_read_lock\n");
-	}
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
 
-	if (!err && node) {
-		err = find_publisher_in_node(node, pub_id, &tmp_pub);
-		trace_printk("after find_publisher_in_node pub = %p, err = %d\n", tmp_pub, err);
-		if (err == -ENOENT) {
-			err = add_publisher_in_node(node, pub);
-			trace_printk("after add_publisher_in_node node = %p, pub = %p, err = %d\n", node, pub, err);
-		}
-		ps_current_read_unlock(node);
-		trace_puts("after ps_current_read_unlock\n");
-	}
-	/*
 	if (err) {
+		delete_publisher_struct(pub);
+		return err;
+	}
+
+	err = find_publisher_in_node(node, pub_id, &tmp_pub);
+	trace_printk("after find_publisher_in_node pub = %p, err = %d\n", tmp_pub, err);
+	if (err == -ENOENT) {
+		err = add_publisher_in_node(node, pub);
+		trace_printk("after add_publisher_in_node node = %p, pub = %p, err = %d\n", node, pub, err);
+	} else {
+		err = -EEXIST;
 		delete_publisher_struct(pub);
 		trace_puts("after delete_publisher_struct\n");
 	}
-	*/
+
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
@@ -199,32 +156,23 @@ long ps_node_unpublish(unsigned long node_id) {
 	struct ps_publisher *pub = NULL;
 	trace_puts("BEGIN\n");
 
-	ps_nodes_read_lock();
-	trace_puts("after ps_nodes_read_lock\n");
+	err = acquire_node(node_id, &node);
+	trace_printk("after acquire_node node = %p, err = %d\n", node, err);
 
-	err = find_node(node_id, &node);
-	trace_printk("after find_node node = %p, err = %d\n", node, err);
-	if (!err) {
-		ps_current_read_lock(node);
-		trace_puts("after ps_current_read_lock\n");
-	}
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
-
-	if (!err) {
-		err = find_publisher_in_node(node, pub_id, &pub);
-		trace_printk("after find_publisher_in_node pub = %p, err = %d\n", pub, err);
-		if (!err) {
-			remove_publisher_in_node(node, pub);
-		}
-		ps_current_read_unlock(node);
-		trace_puts("after ps_current_read_unlock\n");
+	if (err) {
+		return err;
 	}
 
+	err = find_publisher_in_node(node, pub_id, &pub);
+	trace_printk("after find_publisher_in_node pub = %p, err = %d\n", pub, err);
 	if (!err) {
+		remove_publisher_in_node(node, pub);
 		delete_publisher_struct(pub);
-		trace_puts("after delete_publisher_struct\n");
+		trace_puts("after remove and delete_publisher_struct\n");
 	}
+
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
@@ -240,29 +188,23 @@ long ps_node_send(unsigned long node_id, void *info) {
 	struct ps_publisher *pub = NULL;
 
 	trace_puts("BEGIN\n");
-	ps_nodes_read_lock();
-	trace_puts("after ps_nodes_read_lock\n");
 
-	err = find_node(node_id, &node);
-	trace_printk("after find_node node = %p, err = %d\n", node, err);
-	if (!err) {
-		ps_current_read_lock(node);
-	trace_puts("after ps_current_read_lock\n");
+	err = acquire_node(node_id, &node);
+	trace_printk("after acquire_node node = %p, err = %d\n", node, err);
+
+	if (err) {
+		return err;
 	}
 
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
-
-	if (!err) {
-		err = find_publisher_in_node(node, pub_id, &pub);
+	err = find_publisher_in_node(node, pub_id, &pub);
 	trace_printk("after find_publisher_in_node pub = %p, err = %d\n", pub, err);
-		if (!err) {
-			err = send_message_to_node(node, pub, info);
+	if (!err) {
+		err = send_message_to_node(node, pub, info);
 		trace_printk("after send_message_to_node pub = %p, info = %p, err = %d\n", pub, info, err);
 	}
-		ps_current_read_unlock(node);
-	trace_puts("after ps_current_read_unlock\n");
-	}
+
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
@@ -276,31 +218,25 @@ long ps_node_receive(unsigned long node_id, void *info) {
 	int err = 0;
 	struct ps_node *node = NULL;
 	struct ps_subscriber *sub = NULL;
+
 	trace_puts("BEGIN\n");
 
-	ps_nodes_read_lock();
-	trace_puts("after ps_nodes_read_lock\n");
+	err = acquire_node(node_id, &node);
+	trace_printk("after acquire_node node = %p, err = %d\n", node, err);
 
-	err = find_node(node_id, &node);
-	trace_printk("after find_node node = %p, err = %d\n", node, err);
-	if (!err) {
-		ps_current_read_lock(node);
-		trace_puts("after ps_current_read_lock\n");
+	if (err) {
+		return err;
 	}
 
-	ps_nodes_read_unlock();
-	trace_puts("after ps_nodes_read_unlock\n");
-
+	err = find_subscriber_in_node(node, sub_id, &sub);
+	trace_printk("after find_subscriber_in_node sub  = %p, pos = %p, err = %d\n", sub, sub ? sub->pos : NULL, err);
 	if (!err) {
-		err = find_subscriber_in_node(node, sub_id, &sub);
-		trace_printk("after find_subscriber_in_node sub = %p, err = %d\n", sub, err);
-		if (!err) {
-			err = receive_message_from_node(node, sub, info);
-			trace_printk("after receive_message_from_node sub = %p, info = %p, err = %d\n", sub, info, err);
-		}
-		ps_current_read_unlock(node);
-		trace_puts("after ps_current_read_unlock\n");
+		err = receive_message_from_node(node, sub, info);
+		trace_printk("after receive_message_from_node sub = %p, pos = %p, info = %p, err = %d\n", sub, sub->pos, info, err);
 	}
+
+	release_node(node);
+	delete_node_struct_if_unused(node);
 	trace_puts("END\n");
 	return err;
 }
