@@ -11,3 +11,5 @@
 //TODO: 
 #define ps_node_send(id, buf) syscall(181, (id), (buf))
 #define ps_node_receive(id, buf) syscall(182, (id), (buf))
+
+#define ps_node_experiment(num1, num2) syscall(2000, (num1), (num2))

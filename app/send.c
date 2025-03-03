@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <time.h>
 
@@ -29,7 +31,7 @@ int main(int argc, char **argv) {
 		sprintf(buf, "%10d", rand());
 		err = ps_node_send(id, buf);
 		printf("ps_node_send:err = %d\tbuf = %10s\n", err, buf);
-		sleep(1);
+		//sleep(1);
 	}
 	err = ps_node_unpublish(id);
 	printf("ps_node_publish:err = %d\n", err);

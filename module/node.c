@@ -69,7 +69,7 @@ int create_node_struct(size_t buf_size, size_t block_size, struct ps_node **resu
 	}
 	init_publisher_collection(&(node->pubs_coll));
 	init_subscriber_collection(&(node->subs_coll));
-	trace_printk("&subs_lock == %p, &pubs_lock == %p, &nodes_lock == %p\n", &node->subs_lock, &node->pubs_lock, &nodes_lock);
+	//trace_printk("&subs_lock == %p, &pubs_lock == %p, &nodes_lock == %p\n", &node->subs_lock, &node->pubs_lock, &nodes_lock);
 	spin_lock_init(&node->subs_lock);
 	spin_lock_init(&node->pubs_lock);
 	spin_lock_init(&node->pos_lock);
@@ -237,6 +237,14 @@ int find_subscriber_in_node(struct ps_node *node, pid_t pid, struct ps_subscribe
 	return find_subscriber(&(node->subs_coll), pid, result);
 }
 
+static void print_buffer(struct ps_buffer *buf) {
+	int cur = 0;
+	for (unsigned int i = 0; i < buf->buf_size; i++) {
+		//trace_printk("%3u:\t%10s\n", i, &((char *)buf->base_begin)[cur]);
+		cur += buf->blk_size;
+	}
+}
+
 #ifndef PS_TEST
 int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void __user *info) {
 #else
@@ -246,7 +254,7 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 		return -EINVAL;
 	int err = 0;
 	struct ps_prohibition *proh = get_publisher_prohibition(pub);
-	trace_printk("pub == %p, proh == %p\n", pub, proh);
+	//trace_printk("pub == %p, proh == %p\n", pub, proh);
 	spin_lock(&node->pos_lock);
 	if (is_prohibit_success(&node->buf)) {
 		prohibit_buffer_end(&node->buf, proh);
@@ -261,6 +269,7 @@ int send_message_to_node(struct ps_node *node, struct ps_publisher *pub, void *i
 		err = -EAGAIN;
 	}
 	spin_unlock(&node->pos_lock);
+	//print_buffer(&node->buf);
 	return err;
 }
 
@@ -273,24 +282,23 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 		return -EINVAL;
 	int err = 0;
 	struct ps_position *pos = get_subscriber_position(sub), *new_pos = NULL;
-	//trace_printk("after get_subscriber_position pos = %p, sub = %p\n", pos, sub);
+	////trace_printk("after get_subscriber_position pos = %p, sub = %p\n", pos, sub);
 	int flag = is_position_incorrect(&node->buf, pos);
-	trace_printk("after is_position_incorrect flag = %d, pos = %p\n", flag, pos);
-	if (pos)
-		trace_printk("pos->addr = %p, diff_begin = %ld, diff_end_read = %ld\n", pos->addr, node->buf.begin - pos->addr, node->buf.end - pos->addr);
-	else
+	//trace_printk("after is_position_incorrect flag = %d, pos = %p\n", flag, pos);
+	//trace_printk("pos->addr = %p, diff_begin = %ld, diff_end_read = %ld\n", pos->addr, node->buf.begin - pos->addr, node->buf.end - pos->addr);
+	if (!pos)
 		return -EBADF;
 	if (!flag) {
-		trace_puts("after is_position_correct\n");
+		//trace_puts("after is_position_correct\n");
 		err = read_from_buffer_at_position(&node->buf, pos, info);
-		trace_printk("after read_from_buffer_at_position err = %d\n", err);
+		//trace_printk("after read_from_buffer_at_position err = %d\n", err);
 		spin_lock(&node->pos_lock);
 		if (!err) {
 			new_pos = find_next_position(&node->buf, pos);
-			trace_printk("after find_next_position new_pos = %p\n", new_pos);
+			//trace_printk("after find_next_position new_pos = %p\n", new_pos);
 			if (!new_pos) {
 				new_pos = find_free_position(&node->buf);
-				trace_printk("after find_free_position new_pos = %p\n", new_pos);
+				//trace_printk("after find_free_position new_pos = %p\n", new_pos);
 				if (new_pos) {
 					pop_free_position(&node->buf, new_pos);
 					push_used_position_after(&node->buf, new_pos, pos);
@@ -311,5 +319,6 @@ int receive_message_from_node(struct ps_node *node, struct ps_subscriber *sub, v
 	} else {
 		err = -EAGAIN;//Пока новые сообщения не приходили
 	}
+	//print_buffer(&node->buf);
 	return err;
 }
